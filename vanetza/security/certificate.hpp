@@ -205,7 +205,7 @@ boost::optional<Uncompressed> get_uncompressed_public_key(const Certificate&, Ba
  * \param backend Backend
  * \return public key (if available)
  */
-boost::optional<ecdsa256::PublicKey> get_public_key(const Certificate&, Backend& backend);
+boost::optional<generic_key::PublicKey> get_public_key(const Certificate&, Backend& backend);
 
 /**
  * Calculate hash id of certificate

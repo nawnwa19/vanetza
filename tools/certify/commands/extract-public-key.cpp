@@ -8,6 +8,9 @@
 
 namespace po = boost::program_options;
 using namespace vanetza::security;
+ExtractPublicKeyCommand::ExtractPublicKeyCommand(
+    const std::string& sig_key_type)
+    : m_signature_key_type(sig_key_type) {}
 
 bool ExtractPublicKeyCommand::parse(const std::vector<std::string>& opts)
 {
@@ -62,10 +65,10 @@ int ExtractPublicKeyCommand::execute()
             std::cerr << "Reading public key from certificate failed." << std::endl;
         }
 
-        public_key = *certificate_key;
+        // public_key = *certificate_key;
     } else {
-        auto private_key = load_private_key_from_file(private_key_path);
-        public_key = private_key.public_key;
+        auto private_key = load_private_key_from_file(private_key_path,m_signature_key_type);
+        // public_key = private_key.public_key;
     }
 
     std::cout << "OK" << std::endl;

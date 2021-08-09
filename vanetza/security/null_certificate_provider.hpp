@@ -15,7 +15,7 @@ public:
 
     const Certificate& own_certificate() override;
     std::list<Certificate> own_chain() override;
-    const ecdsa256::PrivateKey& own_private_key() override;
+    const generic_key::PrivateKey& own_private_key() override;
 
     /**
      * Get static dummy certificate

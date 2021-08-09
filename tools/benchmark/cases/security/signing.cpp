@@ -7,6 +7,10 @@ using namespace vanetza;
 using namespace vanetza::security;
 namespace po = boost::program_options;
 
+SecuritySigningCase::SecuritySigningCase(std::string& sig_key_type) : SecurityBaseCase(sig_key_type)
+{
+}
+
 bool SecuritySigningCase::parse(const std::vector<std::string>& opts)
 {
     po::options_description desc("Available options");
@@ -59,9 +63,12 @@ int SecuritySigningCase::execute()
         sign_header_policy.request_certificate_chain();
     }
 
-    std::cout << "Starting benchmark for messages ... ";
+    std::cout << "Starting type: " << signature_key_type << " signing benchmark for " << messages << "messages ... ";
+    {
+        // Using std::chrono
+        auto start = std::chrono::high_resolution_clock::now(); // start timer
 
-    for (unsigned i = 0; i < messages; i++) {
+        for (unsigned i = 0; i < messages; i++) {
         DownPacket packet;
         packet.layer(OsiLayer::Application) = ByteBuffer { 0xC0, 0xFF, 0xEE };
 
@@ -70,6 +77,11 @@ int SecuritySigningCase::execute()
         encap_request.its_aid = aid::CA;
 
         EncapConfirm encap_confirm = security_entity.encapsulate_packet(std::move(encap_request));
+    }
+
+        auto diff = std::chrono::high_resolution_clock::now() - start; // get difference
+        auto msec = std::chrono::duration_cast<std::chrono::milliseconds>(diff);
+        std::cout << "Signing took: " << msec.count() << " milliseconds" << std::endl;
     }
 
     std::cout << "[Done]" << std::endl;

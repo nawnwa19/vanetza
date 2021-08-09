@@ -22,7 +22,7 @@ namespace security
 class NaiveCertificateProvider : public CertificateProvider
 {
 public:
-    NaiveCertificateProvider(const Runtime&);
+    NaiveCertificateProvider(const Runtime&, const std::string&);
 
     /**
      * \brief get own certificate for signing
@@ -40,7 +40,7 @@ public:
      * \brief get own private key
      * \return private key
      */
-    const ecdsa256::PrivateKey& own_private_key() override;
+    const generic_key::PrivateKey& own_private_key() override;
 
     /**
      * \brief get ticket signer certificate (same for all instances)
@@ -71,13 +71,13 @@ private:
      * \brief get root key (same for all instances)
      * \return root key
      */
-    const ecdsa256::KeyPair& aa_key_pair();
+    const generic_key::KeyPair& aa_key_pair();
 
     /**
      * \brief get root key (same for all instances)
      * \return root key
      */
-    const ecdsa256::KeyPair& root_key_pair();
+    const generic_key::KeyPair& root_key_pair();
 
     /**
      * \brief generate a authorization authority certificate
@@ -95,7 +95,8 @@ private:
 
     BackendCryptoPP m_crypto_backend; /*< key generation is not a generic backend feature */
     const Runtime& m_runtime;
-    const ecdsa256::KeyPair m_own_key_pair;
+    const std::string m_signature_key_type;  /// To check if instantiated for ECDSA or OQS(ditlithium1,2..)
+    const generic_key::KeyPair m_own_key_pair;
     Certificate m_own_certificate;
 };
 

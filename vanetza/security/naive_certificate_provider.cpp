@@ -12,9 +12,10 @@ namespace vanetza
 namespace security
 {
 
-NaiveCertificateProvider::NaiveCertificateProvider(const Runtime& rt) :
+NaiveCertificateProvider::NaiveCertificateProvider(const Runtime& rt,const std::string& sig_type) :
     m_runtime(rt),
-    m_own_key_pair(m_crypto_backend.generate_key_pair()),
+    m_signature_key_type(sig_type),
+    m_own_key_pair(m_crypto_backend.generate_key_pair(sig_type)),
     m_own_certificate(generate_authorization_ticket()) { }
 
 const Certificate& NaiveCertificateProvider::own_certificate()
@@ -35,26 +36,35 @@ const Certificate& NaiveCertificateProvider::own_certificate()
 std::list<Certificate> NaiveCertificateProvider::own_chain()
 {
     static const std::list<Certificate> chain = { aa_certificate() };
-
     return chain;
 }
 
-const ecdsa256::PrivateKey& NaiveCertificateProvider::own_private_key()
+const generic_key::PrivateKey& NaiveCertificateProvider::own_private_key()
 {
-    return m_own_key_pair.private_key;
+        auto visitor = generic_key::compose(
+        // For ECDSA
+        [](const ecdsa256::KeyPair &key_pair) {
+            return generic_key::PrivateKey{key_pair.private_key};
+        },
+
+        // For OQS
+        [](const generic_key::KeyPairOQS &key_pair) {
+            return generic_key::PrivateKey{key_pair.private_key};
+        });
+
+    static const auto key =  boost::apply_visitor(visitor, m_own_key_pair);
+    return key;
 }
 
-const ecdsa256::KeyPair& NaiveCertificateProvider::aa_key_pair()
+const generic_key::KeyPair& NaiveCertificateProvider::aa_key_pair()
 {
-    static const ecdsa256::KeyPair aa_key_pair = m_crypto_backend.generate_key_pair();
-
+    static const generic_key::KeyPair aa_key_pair = m_crypto_backend.generate_key_pair(m_signature_key_type);
     return aa_key_pair;
 }
 
-const ecdsa256::KeyPair& NaiveCertificateProvider::root_key_pair()
+const generic_key::KeyPair& NaiveCertificateProvider::root_key_pair()
 {
-    static const ecdsa256::KeyPair root_key_pair = m_crypto_backend.generate_key_pair();
-
+    static const generic_key::KeyPair root_key_pair = m_crypto_backend.generate_key_pair(m_signature_key_type);
     return root_key_pair;
 }
 
@@ -97,15 +107,31 @@ Certificate NaiveCertificateProvider::generate_authorization_ticket()
     // section 7.4.1 in TS 103 097 v1.2.1
     // set subject attributes
     // set the verification_key
-    Uncompressed coordinates;
-    coordinates.x.assign(m_own_key_pair.public_key.x.begin(), m_own_key_pair.public_key.x.end());
-    coordinates.y.assign(m_own_key_pair.public_key.y.begin(), m_own_key_pair.public_key.y.end());
-    EccPoint ecc_point = coordinates;
-    ecdsa_nistp256_with_sha256 ecdsa;
-    ecdsa.public_key = ecc_point;
-    VerificationKey verification_key;
-    verification_key.key = ecdsa;
-    certificate.subject_attributes.push_back(verification_key);
+    auto visitor = generic_key::compose(
+        // For ECDSA
+        [&](const ecdsa256::KeyPair &key_pair)
+        {
+            Uncompressed coordinates;
+            coordinates.x.assign(key_pair.public_key.x.begin(), key_pair.public_key.x.end());
+            coordinates.y.assign(key_pair.public_key.y.begin(), key_pair.public_key.y.end());
+            EccPoint ecc_point = coordinates;
+            ecdsa_nistp256_with_sha256 ecdsa;
+            ecdsa.public_key = ecc_point;
+            VerificationKey verification_key;
+            verification_key.key = ecdsa;
+            certificate.subject_attributes.push_back(verification_key);
+        },
+
+        // For OQS
+        [&](const generic_key::KeyPairOQS &key_pair) {
+            dilithium2 dil2;
+            dil2.public_key.K = key_pair.public_key.pub_K;
+            VerificationKey verification_key;
+            verification_key.key = dil2;
+            certificate.subject_attributes.push_back(verification_key);
+        });
+
+    boost::apply_visitor(visitor, m_own_key_pair);
 
     // section 6.7 in TS 103 097 v1.2.1
     // set validity restriction
@@ -124,7 +150,20 @@ void NaiveCertificateProvider::sign_authorization_ticket(Certificate& certificat
     sort(certificate);
 
     ByteBuffer data_buffer = convert_for_signing(certificate);
-    certificate.signature = m_crypto_backend.sign_data(aa_key_pair().private_key, data_buffer);
+
+    auto visitor = generic_key::compose(
+        // For ECDSA
+        [&](const ecdsa256::KeyPair &key_pair) {
+            return generic_key::PrivateKey { key_pair.private_key};
+        },
+
+        // For OQS
+        [&](const generic_key::KeyPairOQS &key_pair) {
+            return generic_key::PrivateKey { key_pair.private_key};
+        });
+
+    auto aa_priv_key = boost::apply_visitor(visitor, aa_key_pair());
+    certificate.signature = m_crypto_backend.sign_data(aa_priv_key, data_buffer);
 }
 
 Certificate NaiveCertificateProvider::generate_aa_certificate(const std::string& subject_name)
@@ -153,15 +192,32 @@ Certificate NaiveCertificateProvider::generate_aa_certificate(const std::string&
     // section 7.4.1 in TS 103 097 v1.2.1
     // set subject attributes
     // set the verification_key
-    Uncompressed coordinates;
-    coordinates.x.assign(aa_key_pair().public_key.x.begin(), aa_key_pair().public_key.x.end());
-    coordinates.y.assign(aa_key_pair().public_key.y.begin(), aa_key_pair().public_key.y.end());
-    EccPoint ecc_point = coordinates;
-    ecdsa_nistp256_with_sha256 ecdsa;
-    ecdsa.public_key = ecc_point;
-    VerificationKey verification_key;
-    verification_key.key = ecdsa;
-    certificate.subject_attributes.push_back(verification_key);
+    auto visitor1 = generic_key::compose(
+        // For ECDSA
+        [&](const ecdsa256::KeyPair &key_pair)
+        {
+            Uncompressed coordinates;
+            coordinates.x.assign(key_pair.public_key.x.begin(), key_pair.public_key.x.end());
+            coordinates.y.assign(key_pair.public_key.y.begin(), key_pair.public_key.y.end());
+            EccPoint ecc_point = coordinates;
+            ecdsa_nistp256_with_sha256 ecdsa;
+            ecdsa.public_key = ecc_point;
+            VerificationKey verification_key;
+            verification_key.key = ecdsa;
+            certificate.subject_attributes.push_back(verification_key);
+        },
+
+        // For OQS
+        [&](const generic_key::KeyPairOQS &key_pair)
+        {
+            dilithium2 dil2;
+            dil2.public_key.K = key_pair.public_key.pub_K;
+            VerificationKey verification_key;
+            verification_key.key = dil2;
+            certificate.subject_attributes.push_back(verification_key);
+        });
+
+    boost::apply_visitor(visitor1, aa_key_pair());
 
     // section 6.7 in TS 103 097 v1.2.1
     // set validity restriction
@@ -174,8 +230,19 @@ Certificate NaiveCertificateProvider::generate_aa_certificate(const std::string&
 
     // set signature
     ByteBuffer data_buffer = convert_for_signing(certificate);
-    certificate.signature = m_crypto_backend.sign_data(root_key_pair().private_key, data_buffer);
+    auto visitor2 = generic_key::compose(
+        // For ECDSA
+        [&](const ecdsa256::KeyPair &key_pair) {
+            return generic_key::PrivateKey { key_pair.private_key };
+        },
 
+        // For OQS
+        [&](const generic_key::KeyPairOQS &key_pair) {
+            return generic_key::PrivateKey {key_pair.private_key};
+        });
+
+    auto root_priv_key =  boost::apply_visitor(visitor2, root_key_pair());
+    certificate.signature = m_crypto_backend.sign_data(root_priv_key, data_buffer);
     return certificate;
 }
 
@@ -205,15 +272,32 @@ Certificate NaiveCertificateProvider::generate_root_certificate(const std::strin
     // section 7.4.1 in TS 103 097 v1.2.1
     // set subject attributes
     // set the verification_key
-    Uncompressed coordinates;
-    coordinates.x.assign(root_key_pair().public_key.x.begin(), root_key_pair().public_key.x.end());
-    coordinates.y.assign(root_key_pair().public_key.y.begin(), root_key_pair().public_key.y.end());
-    EccPoint ecc_point = coordinates;
-    ecdsa_nistp256_with_sha256 ecdsa;
-    ecdsa.public_key = ecc_point;
-    VerificationKey verification_key;
-    verification_key.key = ecdsa;
-    certificate.subject_attributes.push_back(verification_key);
+    auto visitor1 = generic_key::compose(
+        // For ECDSA
+        [&](const ecdsa256::KeyPair &key_pair)
+        {
+            Uncompressed coordinates;
+            coordinates.x.assign(key_pair.public_key.x.begin(), key_pair.public_key.x.end());
+            coordinates.y.assign(key_pair.public_key.y.begin(), key_pair.public_key.y.end());
+            EccPoint ecc_point = coordinates;
+            ecdsa_nistp256_with_sha256 ecdsa;
+            ecdsa.public_key = ecc_point;
+            VerificationKey verification_key;
+            verification_key.key = ecdsa;
+            certificate.subject_attributes.push_back(verification_key);
+        },
+
+        // For OQS
+        [&](const generic_key::KeyPairOQS &key_pair)
+        {
+            dilithium2 dil2;
+            dil2.public_key.K = key_pair.public_key.pub_K;
+            VerificationKey verification_key;
+            verification_key.key = dil2;
+            certificate.subject_attributes.push_back(verification_key);
+        });
+
+    boost::apply_visitor(visitor1, root_key_pair());
 
     // section 6.7 in TS 103 097 v1.2.1
     // set validity restriction
@@ -226,8 +310,19 @@ Certificate NaiveCertificateProvider::generate_root_certificate(const std::strin
 
     // set signature
     ByteBuffer data_buffer = convert_for_signing(certificate);
-    certificate.signature = m_crypto_backend.sign_data(root_key_pair().private_key, data_buffer);
+    auto visitor2 = generic_key::compose(
+        // For ECDSA
+        [&](const ecdsa256::KeyPair &key_pair) {
+            return generic_key::PrivateKey { key_pair.private_key };
+        },
 
+        // For OQS
+        [&](const generic_key::KeyPairOQS &key_pair) {
+            return generic_key::PrivateKey {key_pair.private_key};
+        });
+    auto root_priv_key =  boost::apply_visitor(visitor2, root_key_pair());
+    
+    certificate.signature = m_crypto_backend.sign_data(root_priv_key, data_buffer);
     return certificate;
 }
 

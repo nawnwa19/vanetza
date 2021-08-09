@@ -1,5 +1,6 @@
 #include <vanetza/security/exception.hpp>
 #include <vanetza/security/signature.hpp>
+#include <vanetza/security/variant_lambda_helper.hpp>
 #include <boost/iostreams/stream.hpp>
 #include <cassert>
 
@@ -20,6 +21,11 @@ PublicKeyAlgorithm get_type(const Signature& sig)
         PublicKeyAlgorithm operator()(const EcdsaSignatureFuture& sig)
         {
             return PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256;
+        }
+
+        PublicKeyAlgorithm operator()(const OqsSignature& sig)
+        {
+            return PublicKeyAlgorithm::DILITHIUM2;
         }
     };
     Signature_visitor visit;
@@ -52,6 +58,11 @@ size_t get_size(const Signature& sig)
         {
             return get_size(sig);
         }
+
+        size_t operator()(const OqsSignature& sig)
+        {
+            return sig.S.size();
+        }
     };
     Signature_visitor visit;
     size += boost::apply_visitor(visit, sig);
@@ -70,6 +81,11 @@ void serialize(OutputArchive& ar, const Signature& sig)
         }
 
         void operator()(const EcdsaSignatureFuture& sig)
+        {
+            serialize(m_archive, sig);
+        }
+
+        void operator()(const OqsSignature& sig)
         {
             serialize(m_archive, sig);
         }
@@ -100,6 +116,16 @@ void serialize(OutputArchive& ar, const EcdsaSignatureFuture& sig)
     serialize(ar, ecdsa);
 }
 
+void serialize(OutputArchive& ar, const OqsSignature& sig)
+{
+    const PublicKeyAlgorithm algo = PublicKeyAlgorithm::DILITHIUM2;
+    assert(field_size_signature(algo) == sig.S.size());
+    
+    for (auto& byte : sig.S){
+        ar << byte;
+    }
+}
+
 size_t deserialize(InputArchive& ar, EcdsaSignature& sig, const PublicKeyAlgorithm& algo)
 {
     EccPoint point;
@@ -115,6 +141,19 @@ size_t deserialize(InputArchive& ar, EcdsaSignature& sig, const PublicKeyAlgorit
     return get_size(sig);
 }
 
+size_t deserialize(InputArchive &ar, OqsSignature &sig, const PublicKeyAlgorithm &algo)
+{
+    size_t size = field_size_signature(algo);
+    uint8_t elem;
+    for (size_t c = 0; c < size; c++)
+    { 
+        ar >> elem;
+        sig.S.push_back(elem);
+    }
+
+    return sig.S.size();
+}
+
 size_t deserialize(InputArchive& ar, Signature& sig)
 {
     PublicKeyAlgorithm algo;
@@ -124,6 +163,13 @@ size_t deserialize(InputArchive& ar, Signature& sig)
     switch (algo) {
         case PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256: {
             EcdsaSignature signature;
+            size += deserialize(ar, signature, algo);
+            sig = signature;
+            break;
+        }
+        case PublicKeyAlgorithm::DILITHIUM2:
+        {
+            OqsSignature signature;
             size += deserialize(ar, signature, algo);
             sig = signature;
             break;
@@ -148,6 +194,11 @@ ByteBuffer extract_signature_buffer(const Signature& sig)
         {
             const EcdsaSignature& sig = sig_future.get();
             (*this)(sig);
+        }
+
+        void operator()(const OqsSignature& sig)
+        {
+            m_buffer = sig.S;
         }
 
         ByteBuffer m_buffer;
@@ -180,24 +231,25 @@ std::size_t EcdsaSignatureFuture::size() const
     return m_bytes;
 }
 
-boost::optional<EcdsaSignature> extract_ecdsa_signature(const Signature& sig)
+boost::optional<Signature> extract_signature(const Signature& sig)
 {
-    struct signature_visitor : public boost::static_visitor<const EcdsaSignature*>
-    {
-        const EcdsaSignature* operator()(const EcdsaSignature& sig)
-        {
-            return &sig;
-        }
+    auto visitor = compose_security(
+        // For ECDSA
+        [&](const EcdsaSignature &sig) {
+            return Signature{sig};
+        },
+        // For ECDSA future
+        [&](const EcdsaSignatureFuture &sig) {
+            return Signature{sig.get()};
+        },
 
-        const EcdsaSignature* operator()(const EcdsaSignatureFuture& sig)
-        {
-            return &sig.get();
-        }
-    };
+        // For OQS
+        [&](const OqsSignature &sig) {
+            return Signature{sig};
+        });
 
-    signature_visitor visitor;
-    const EcdsaSignature* ecdsa = boost::apply_visitor(visitor, sig);
-    return boost::optional<EcdsaSignature>(ecdsa != nullptr, *ecdsa);
+    auto signature = boost::apply_visitor(visitor, sig);
+    return boost::optional<Signature>(&signature != nullptr, signature);
 }
 
 } // namespace security

@@ -6,10 +6,12 @@
 class GenerateAaCommand : public Command
 {
 public:
+    GenerateAaCommand(const std::string&);
     bool parse(const std::vector<std::string>&) override;
     int execute() override;
 
 private:
+    std::string m_signature_key_type;
     std::string output;
     std::string sign_key_path;
     std::string sign_cert_path;

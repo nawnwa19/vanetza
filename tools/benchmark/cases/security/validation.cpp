@@ -8,6 +8,10 @@ using namespace vanetza;
 using namespace vanetza::security;
 namespace po = boost::program_options;
 
+SecurityValidationCase::SecurityValidationCase(std::string& sig_key_type) : SecurityBaseCase(sig_key_type)
+{
+}
+
 bool SecurityValidationCase::parse(const std::vector<std::string>& opts)
 {
     po::options_description desc("Available options");
@@ -57,7 +61,7 @@ int SecurityValidationCase::execute()
     std::vector<SecuredMessageV2> secured_messages(identities);
 
     for (unsigned i = 0; i < identities; i++) {
-        providers[i] = new NaiveCertificateProvider(runtime);
+        providers[i] = new NaiveCertificateProvider(runtime,signature_key_type);
         signers[i] = straight_sign_service(*providers[i], *crypto_backend, sign_header_policy);
         entities[i] = new DelegatingSecurityEntity(signers[i], verify_service);
         certificate_cache.insert(providers[i]->own_certificate());
@@ -98,14 +102,20 @@ int SecurityValidationCase::execute()
     std::mt19937 gen(0);
     std::uniform_int_distribution<> dis(0, identities - 1);
 
-    std::cout << "Starting benchmark for messages ... ";
+    std::cout << "Starting type: " << signature_key_type << " validation benchmark for " << messages << " messages ... " << std::endl;
+
+
+    // Using std::chrono
+    auto start = std::chrono::high_resolution_clock::now(); // start timer
 
     for (unsigned i = 0; i < messages; i++) {
         auto copy = secured_messages[dis(gen)];
         auto decap_confirm = security_entity.decapsulate_packet(std::move(copy));
         assert(decap_confirm.report == DecapReport::Success);
     }
-
+    auto diff = std::chrono::high_resolution_clock::now() - start; // get difference
+    auto msec = std::chrono::duration_cast<std::chrono::milliseconds>(diff);
+    std::cout << "Verifying took: " << msec.count() << " milliseconds" << std::endl;
     std::cout << "[Done]" << std::endl;
 
     return 0;

@@ -14,9 +14,11 @@ namespace po = boost::program_options;
 std::unique_ptr<Command> parse_options(int argc, const char *argv[])
 {
     po::options_description global("Global options");
+    std::string signature_key_type;
     global.add_options()
         ("command", po::value<std::string>(), "Command to execute.")
         ("subargs", po::value<std::vector<std::string>>(), "Arguments for command.")
+        ("algorithm", po::value<std::string>(&signature_key_type)->default_value("ecdsa256"), "ECDSA or Dilithium2")
     ;
 
     po::positional_options_description pos;
@@ -50,15 +52,15 @@ std::unique_ptr<Command> parse_options(int argc, const char *argv[])
         std::cerr << global << std::endl;
         std::cerr << available_commands << std::endl;
     } else if (cmd == "extract-public-key") {
-        command.reset(new ExtractPublicKeyCommand());
+        command.reset(new ExtractPublicKeyCommand(signature_key_type));
     } else if (cmd == "generate-aa") {
-        command.reset(new GenerateAaCommand());
+        command.reset(new GenerateAaCommand(signature_key_type));
     } else if (cmd == "generate-key") {
-        command.reset(new GenerateKeyCommand());
+        command.reset(new GenerateKeyCommand(signature_key_type));
     } else if (cmd == "generate-root") {
-        command.reset(new GenerateRootCommand());
+        command.reset(new GenerateRootCommand(signature_key_type));
     } else if (cmd == "generate-ticket") {
-        command.reset(new GenerateTicketCommand());
+        command.reset(new GenerateTicketCommand(signature_key_type));
     } else if (cmd == "show-certificate") {
         command.reset(new ShowCertificateCommand());
     } else {

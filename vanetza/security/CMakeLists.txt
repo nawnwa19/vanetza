@@ -18,7 +18,9 @@ add_vanetza_component(security
     null_certificate_validator.cpp
     payload.cpp
     persistence.cpp
+    generic_key.cpp
     public_key.cpp
+    public_key_commons.cpp
     recipient_info.cpp
     region.cpp
     secured_message.cpp

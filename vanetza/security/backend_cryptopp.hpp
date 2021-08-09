@@ -6,6 +6,7 @@
 #include <cryptopp/eccrypto.h>
 #include <cryptopp/osrng.h>
 #include <cryptopp/sha.h>
+#include <string>
 
 namespace vanetza
 {
@@ -26,10 +27,10 @@ public:
     BackendCryptoPP();
 
     /// \see Backend::sign_data
-    EcdsaSignature sign_data(const ecdsa256::PrivateKey& private_key, const ByteBuffer& data_buffer) override;
+    Signature sign_data(const generic_key::PrivateKey& private_key, const ByteBuffer& data_buffer) override;
 
     /// \see Backend::verify_data
-    bool verify_data(const ecdsa256::PublicKey& public_key, const ByteBuffer& data, const EcdsaSignature& sig) override;
+    bool verify_data(const generic_key::PublicKey& public_key, const ByteBuffer& data, const Signature& sig) override;
 
     /// \see Backend::decompress_point
     boost::optional<Uncompressed> decompress_point(const EccPoint& ecc_point) override;
@@ -38,7 +39,7 @@ public:
      * \brief generate a private key and the corresponding public key
      * \return generated key pair
      */
-    ecdsa256::KeyPair generate_key_pair();
+    generic_key::KeyPair generate_key_pair(const std::string& sig_key_type);
 
 private:
     /// internal sign method using crypto++ private key

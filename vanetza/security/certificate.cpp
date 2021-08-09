@@ -12,7 +12,9 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
-
+#include <vanetza/security/variant_lambda_helper.hpp>
+#include <vanetza/security/generic_key.hpp>
+#include <iostream>
 namespace vanetza
 {
 namespace security
@@ -69,9 +71,11 @@ ByteBuffer convert_for_signing(const Certificate& cert)
 
     boost::iostreams::stream_buffer<byte_buffer_sink> stream(sink);
     OutputArchive ar(stream);
-
+    
     const uint8_t version = cert.version();
+    
     ar << version;
+    
     serialize(ar, cert.signer_info);
     serialize(ar, cert.subject_info);
     serialize(ar, cert.subject_attributes);
@@ -117,59 +121,108 @@ boost::optional<Uncompressed> get_uncompressed_public_key(const Certificate& cer
     return public_key_coordinates;
 }
 
-boost::optional<ecdsa256::PublicKey> get_public_key(const Certificate& cert, Backend& backend)
+boost::optional<generic_key::PublicKey> get_public_key(const Certificate& cert, Backend& backend)
 {
-    auto unc = get_uncompressed_public_key(cert, backend);
-    boost::optional<ecdsa256::PublicKey> result;
-    ecdsa256::PublicKey pub;
-    if (unc && unc->x.size() == pub.x.size() && unc->y.size() == pub.y.size()) {
-        std::copy_n(unc->x.begin(), pub.x.size(), pub.x.data());
-        std::copy_n(unc->y.begin(), pub.y.size(), pub.y.data());
-        result = std::move(pub);
-    }
-    return result;
+    auto sig_temp = cert.signature;
+
+    auto visitor = compose_security(
+        // If ECDSA signature
+        [&](const EcdsaSignature &sig)
+        {
+            auto unc = get_uncompressed_public_key(cert, backend);
+            boost::optional<ecdsa256::PublicKey> result;
+            ecdsa256::PublicKey pub;
+            if (unc && unc->x.size() == pub.x.size() && unc->y.size() == pub.y.size())
+            {
+                std::copy_n(unc->x.begin(), pub.x.size(), pub.x.data());
+                std::copy_n(unc->y.begin(), pub.y.size(), pub.y.data());
+                result = std::move(pub);
+            }
+            return boost::optional<generic_key::PublicKey>{result};
+        },
+        // If ECDSA future signature
+        [&](const EcdsaSignatureFuture &sig)
+        {
+            boost::optional<generic_key::PublicKey> result;
+            return result;
+        },
+
+        // For OQS signatures
+        [&](const OqsSignature &sig)
+        {
+            generic_key::PublicKey result;
+            for (auto &attribute : cert.subject_attributes)
+            {
+                if (get_type(attribute) == SubjectAttributeType::Verification_Key)
+                {
+                    const VerificationKey &verification_key = boost::get<VerificationKey>(attribute);
+                    result = get_genericPublicKey_from_PublicKey(verification_key.key);
+                    break;
+                }
+            }
+            return result;
+        });
+
+    return boost::apply_visitor(visitor, sig_temp);
 }
 
 HashedId8 calculate_hash(const Certificate& cert)
 {
-    Certificate canonical_cert = cert;
-
-    // canonical encoding according to TS 103 097 V1.2.1, section 4.2.12
-    boost::optional<EcdsaSignature> signature = extract_ecdsa_signature(cert.signature);
-    if (signature) {
-        struct canonical_visitor : public boost::static_visitor<EccPoint>
+    boost::optional<Signature> sig_temp = extract_signature(cert.signature);
+    auto visitor = generic_key::compose(
+        // For ECDSA
+        [&](const EcdsaSignature &sig)
         {
-            EccPoint operator()(const X_Coordinate_Only& x_only) const
+            Certificate canonical_cert = cert;
+
+            // canonical encoding according to TS 103 097 V1.2.1, section 4.2.12
+
+            struct canonical_visitor : public boost::static_visitor<EccPoint>
             {
-                return x_only;
-            }
+                EccPoint operator()(const X_Coordinate_Only& x_only) const
+                {
+                    return x_only;
+                }
 
-            EccPoint operator()(const Compressed_Lsb_Y_0& y0) const
-            {
-                return X_Coordinate_Only { y0.x };
-            }
+                EccPoint operator()(const Compressed_Lsb_Y_0& y0) const
+                {
+                    return X_Coordinate_Only { y0.x };
+                }
 
-            EccPoint operator()(const Compressed_Lsb_Y_1& y1) const
-            {
-                return X_Coordinate_Only { y1.x };
-            }
+                EccPoint operator()(const Compressed_Lsb_Y_1& y1) const
+                {
+                    return X_Coordinate_Only { y1.x };
+                }
 
-            EccPoint operator()(const Uncompressed& unc) const
-            {
-                return X_Coordinate_Only { unc.x };
-            }
-        };
+                EccPoint operator()(const Uncompressed& unc) const
+                {
+                    return X_Coordinate_Only { unc.x };
+                }
+            };
+            EcdsaSignature signature = boost::get<EcdsaSignature>(sig_temp.get());
+            EcdsaSignature canonical_sig;
+            canonical_sig.s = signature.s;
+            canonical_sig.R = boost::apply_visitor(canonical_visitor(), signature.R);
+            assert(get_type(canonical_sig.R) == EccPointType::X_Coordinate_Only);
+            canonical_cert.signature = canonical_sig;
 
-        EcdsaSignature canonical_sig;
-        canonical_sig.s = signature->s;
-        canonical_sig.R = boost::apply_visitor(canonical_visitor(), signature->R);
-        assert(get_type(canonical_sig.R) == EccPointType::X_Coordinate_Only);
-        canonical_cert.signature = canonical_sig;
-    }
+            ByteBuffer bytes;
+            serialize_into_buffer(canonical_cert, bytes);
+            return bytes;
+        },
+        // For ecdsa future
+        [&](const EcdsaSignatureFuture &sig)
+        {
+            return extract_signature_buffer(sig);
+        },
+        // For OQS
+        [&](const OqsSignature &sig)
+        {
+            return extract_signature_buffer(sig);
+        });
+    assert(sig_temp);
 
-    ByteBuffer bytes;
-    serialize_into_buffer(canonical_cert, bytes);
-
+    ByteBuffer bytes = boost::apply_visitor(visitor, cert.signature);
     HashedId8 id;
     Sha256Digest digest = calculate_sha256_digest(bytes.data(), bytes.size());
     assert(digest.size() >= id.size());

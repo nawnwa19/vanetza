@@ -16,4 +16,4 @@ add_executable(certify
 )
 
 set_target_properties(certify PROPERTIES INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(certify Boost::program_options vanetza)
+target_link_libraries(certify Boost::program_options vanetza -loqs)

@@ -16,6 +16,9 @@
 namespace aid = vanetza::aid;
 namespace po = boost::program_options;
 using namespace vanetza::security;
+GenerateAaCommand::GenerateAaCommand(const std::string& sig_key_type):m_signature_key_type(sig_key_type){
+
+}
 
 bool GenerateAaCommand::parse(const std::vector<std::string>& opts)
 {
@@ -59,26 +62,28 @@ int GenerateAaCommand::execute()
     BackendCryptoPP crypto_backend;
 
     std::cout << "Loading keys... ";
-    auto sign_key = load_private_key_from_file(sign_key_path);
-    ecdsa256::PublicKey subject_key;
+    auto sign_key = load_private_key_from_file(sign_key_path,m_signature_key_type);
+    auto subject_key_pair = load_private_key_from_file(subject_key_path,m_signature_key_type);
     try {
-        auto subject_private_key = load_private_key_from_file(subject_key_path);
-        subject_key = subject_private_key.public_key;
+        // auto subject_private_key = load_private_key_from_file(subject_key_path);
+        // subject_key = subject_private_key.public_key;
+        // KeyPairOQS, ecdsa256::KeyPair
+        // subject_key = boost::get<>(subject_private_key);
     } catch (CryptoPP::BERDecodeErr& e) {
-        auto subject_key_etsi = load_public_key_from_file(subject_key_path);
-        if (get_type(subject_key_etsi) != PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256) {
-            std::cerr << "Wrong public key algorithm." << std::endl;
-            return 1;
-        }
+        // auto subject_key_etsi = load_public_key_from_file(subject_key_path);
+        // if (get_type(subject_key_etsi) != PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256) {
+        //     std::cerr << "Wrong public key algorithm." << std::endl;
+        //     return 1;
+        // }
 
-        auto subject_key_etsi_ecdsa = boost::get<ecdsa_nistp256_with_sha256>(subject_key_etsi);
-        auto uncompressed_subject_ecc_point = crypto_backend.decompress_point(subject_key_etsi_ecdsa.public_key);
-        if (!uncompressed_subject_ecc_point) {
-            std::cerr << "Cannot get uncompressed ECC point from public key.";
-            return 1;
-        } else {
-            subject_key = ecdsa256::create_public_key(*uncompressed_subject_ecc_point);
-        }
+        // auto subject_key_etsi_ecdsa = boost::get<ecdsa_nistp256_with_sha256>(subject_key_etsi);
+        // auto uncompressed_subject_ecc_point = crypto_backend.decompress_point(subject_key_etsi_ecdsa.public_key);
+        // if (!uncompressed_subject_ecc_point) {
+        //     std::cerr << "Cannot get uncompressed ECC point from public key.";
+        //     return 1;
+        // } else {
+        //     subject_key = generic_key::create_public_key(*uncompressed_subject_ecc_point);
+        // }
     }
     std::cout << "OK" << std::endl;
 
@@ -106,15 +111,36 @@ int GenerateAaCommand::execute()
     certificate.subject_info.subject_type = SubjectType::Authorization_Authority;
     certificate.subject_attributes.push_back(SubjectAssurance(0x00));
 
-    Uncompressed coordinates;
-    coordinates.x.assign(subject_key.x.begin(), subject_key.x.end());
-    coordinates.y.assign(subject_key.y.begin(), subject_key.y.end());
-    EccPoint ecc_point = coordinates;
-    ecdsa_nistp256_with_sha256 ecdsa;
-    ecdsa.public_key = ecc_point;
-    VerificationKey verification_key;
-    verification_key.key = ecdsa;
-    certificate.subject_attributes.push_back(verification_key);
+    // section 7.4.1 in TS 103 097 v1.2.1
+    // set subject attributes
+    // set the verification_key
+    auto visitor1 = generic_key::compose(
+        // For ECDSA
+        [&](const ecdsa256::KeyPair& subject_key) {
+            Uncompressed coordinates;
+            coordinates.x.assign(subject_key.public_key.x.begin(),
+                                 subject_key.public_key.x.end());
+            coordinates.y.assign(subject_key.public_key.y.begin(),
+                                 subject_key.public_key.y.end());
+            EccPoint ecc_point = coordinates;
+            ecdsa_nistp256_with_sha256 ecdsa;
+            ecdsa.public_key = ecc_point;
+            VerificationKey verification_key;
+            verification_key.key = ecdsa;
+            certificate.subject_attributes.push_back(verification_key);
+        },
+
+        // For OQS
+        [&](const generic_key::KeyPairOQS& subject_key) {
+            // %% later %%
+            dilithium2 dil2;
+            dil2.public_key.K = subject_key.public_key.pub_K;
+            VerificationKey verification_key;
+            verification_key.key = dil2;
+            certificate.subject_attributes.push_back(verification_key);
+        });
+
+    boost::apply_visitor(visitor1, subject_key_pair);
 
     StartAndEndValidity start_and_end;
     start_and_end.start_validity = convert_time32(time_now - std::chrono::hours(1));
@@ -125,7 +151,19 @@ int GenerateAaCommand::execute()
 
     sort(certificate);
     auto data_buffer = convert_for_signing(certificate);
-    certificate.signature = crypto_backend.sign_data(sign_key.private_key, data_buffer);
+    auto visitor2 = generic_key::compose(
+        // For ECDSA
+        [&](const ecdsa256::KeyPair &subject_key) {
+            return generic_key::PrivateKey { subject_key.private_key };
+        },
+
+        // For OQS
+        [&](const generic_key::KeyPairOQS &subject_key) {
+            return generic_key::PrivateKey { subject_key.private_key };
+        });
+    auto sign_priv_key =  boost::apply_visitor(visitor2, sign_key);
+
+    certificate.signature = crypto_backend.sign_data(sign_priv_key, data_buffer);
 
     std::cout << "OK" << std::endl;
 

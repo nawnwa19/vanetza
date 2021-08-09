@@ -11,31 +11,61 @@ namespace vanetza
 namespace security
 {
 
-ecdsa256::KeyPair load_private_key_from_file(const std::string& key_path)
+generic_key::KeyPair load_private_key_from_file(const std::string& key_path,const std::string& sig_key_type)
 {
-    CryptoPP::AutoSeededRandomPool rng;
+    generic_key::KeyPair result;
+    namespace vs = vanetza::security;
+    vs::PublicKeyAlgorithm type = vs::get_algo_from_string(sig_key_type);
+    switch (type) {
+        case vs::PublicKeyAlgorithm::ECIES_NISTP256:
+        case vs::PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256: {
+            CryptoPP::AutoSeededRandomPool rng;
 
-    CryptoPP::ECDSA<CryptoPP::ECP, CryptoPP::SHA256>::PrivateKey private_key;
-    CryptoPP::FileSource key_file(key_path.c_str(), true);
-    private_key.Load(key_file);
+            CryptoPP::ECDSA<CryptoPP::ECP, CryptoPP::SHA256>::PrivateKey
+                private_key;
+            CryptoPP::FileSource key_file(key_path.c_str(), true);
+            private_key.Load(key_file);
 
-    if (!private_key.Validate(rng, 3)) {
-        throw std::runtime_error("Private key validation failed");
+            if (!private_key.Validate(rng, 3)) {
+                throw std::runtime_error("Private key validation failed");
+            }
+
+            ecdsa256::KeyPair key_pair;
+
+            auto& private_exponent = private_key.GetPrivateExponent();
+            private_exponent.Encode(key_pair.private_key.key.data(),
+                                    key_pair.private_key.key.size());
+
+            CryptoPP::ECDSA<CryptoPP::ECP, CryptoPP::SHA256>::PublicKey
+                public_key;
+            private_key.MakePublicKey(public_key);
+
+            auto& public_element = public_key.GetPublicElement();
+            public_element.x.Encode(key_pair.public_key.x.data(),
+                                    key_pair.public_key.x.size());
+            public_element.y.Encode(key_pair.public_key.y.data(),
+                                    key_pair.public_key.y.size());
+
+            result = generic_key::KeyPair{std::move(key_pair)};
+            break;
+        }
+        case vs::PublicKeyAlgorithm::UNKNOWN:
+            break;
+        default: {  // For all OQS types
+            generic_key::KeyPairOQS key_pair;
+            std::ifstream key_src(key_path, std::ios::binary);
+            
+            if (key_src.is_open()) { 
+                vanetza::InputArchive ar(key_src);
+                vs::generic_key::deserialize(ar, key_pair, type);
+                result = generic_key::KeyPair{std::move(key_pair)};
+                key_src.close();
+            } else
+                std::cout << "Unable to open file" << std::endl;
+            break;
+        }
     }
-
-    ecdsa256::KeyPair key_pair;
-
-    auto& private_exponent = private_key.GetPrivateExponent();
-    private_exponent.Encode(key_pair.private_key.key.data(), key_pair.private_key.key.size());
-
-    CryptoPP::ECDSA<CryptoPP::ECP, CryptoPP::SHA256>::PublicKey public_key;
-    private_key.MakePublicKey(public_key);
-
-    auto& public_element = public_key.GetPublicElement();
-    public_element.x.Encode(key_pair.public_key.x.data(), key_pair.public_key.x.size());
-    public_element.y.Encode(key_pair.public_key.y.data(), key_pair.public_key.y.size());
-
-    return key_pair;
+    return result;
 }
 
 PublicKey load_public_key_from_file(const std::string& key_path)

@@ -15,6 +15,8 @@
 namespace aid = vanetza::aid;
 namespace po = boost::program_options;
 using namespace vanetza::security;
+GenerateRootCommand::GenerateRootCommand(const std::string& sig_key_type)
+    : m_signature_key_type(sig_key_type) {}
 
 bool GenerateRootCommand::parse(const std::vector<std::string>& opts)
 {
@@ -56,7 +58,7 @@ int GenerateRootCommand::execute()
     BackendCryptoPP crypto_backend;
 
     std::cout << "Loading key... ";
-    auto subject_key = load_private_key_from_file(subject_key_path);
+    auto subject_key = load_private_key_from_file(subject_key_path,m_signature_key_type);
     std::cout << "OK" << std::endl;
 
     auto time_now = vanetza::Clock::at(boost::posix_time::microsec_clock::universal_time());
@@ -91,15 +93,33 @@ int GenerateRootCommand::execute()
     // section 7.4.1 in TS 103 097 v1.2.1
     // set subject attributes
     // set the verification_key
-    Uncompressed coordinates;
-    coordinates.x.assign(subject_key.public_key.x.begin(), subject_key.public_key.x.end());
-    coordinates.y.assign(subject_key.public_key.y.begin(), subject_key.public_key.y.end());
-    EccPoint ecc_point = coordinates;
-    ecdsa_nistp256_with_sha256 ecdsa;
-    ecdsa.public_key = ecc_point;
-    VerificationKey verification_key;
-    verification_key.key = ecdsa;
-    certificate.subject_attributes.push_back(verification_key);
+    auto visitor1 = generic_key::compose(
+        // For ECDSA
+        [&](const ecdsa256::KeyPair& subject_key) {
+            Uncompressed coordinates;
+            coordinates.x.assign(subject_key.public_key.x.begin(),
+                                 subject_key.public_key.x.end());
+            coordinates.y.assign(subject_key.public_key.y.begin(),
+                                 subject_key.public_key.y.end());
+            EccPoint ecc_point = coordinates;
+            ecdsa_nistp256_with_sha256 ecdsa;
+            ecdsa.public_key = ecc_point;
+            VerificationKey verification_key;
+            verification_key.key = ecdsa;
+            certificate.subject_attributes.push_back(verification_key);
+        },
+
+        // For OQS
+        [&](const generic_key::KeyPairOQS& subject_key) {
+            // %% later %%
+            dilithium2 dil2;
+            dil2.public_key.K = subject_key.public_key.pub_K;
+            VerificationKey verification_key;
+            verification_key.key = dil2;
+            certificate.subject_attributes.push_back(verification_key);
+        });
+
+    boost::apply_visitor(visitor1, subject_key);
 
     // section 6.7 in TS 103 097 v1.2.1
     // set validity restriction
@@ -112,13 +132,27 @@ int GenerateRootCommand::execute()
 
     sort(certificate);
     vanetza::ByteBuffer data_buffer = convert_for_signing(certificate);
-    certificate.signature = crypto_backend.sign_data(subject_key.private_key, data_buffer);
+    auto visitor2 = generic_key::compose(
+        // For ECDSA
+        [&](const ecdsa256::KeyPair &subject_key) {
+            return generic_key::PrivateKey { subject_key.private_key };
+        },
+
+        // For OQS
+        [&](const generic_key::KeyPairOQS &subject_key) {
+            return generic_key::PrivateKey { subject_key.private_key};
+        });
+    auto subject_priv_key =  boost::apply_visitor(visitor2, subject_key);
+    
+    certificate.signature = crypto_backend.sign_data(subject_priv_key, data_buffer);
 
     std::cout << "OK" << std::endl;
 
     std::cout << "Writing certificate to '" << output << "'... ";
     save_certificate_to_file(output, certificate);
     std::cout << "OK" << std::endl;
+
+   
 
     return 0;
 }

@@ -4,6 +4,7 @@
 #include <vanetza/common/byte_buffer.hpp>
 #include <vanetza/common/factory.hpp>
 #include <vanetza/security/ecdsa256.hpp>
+#include <vanetza/security/generic_key.hpp>
 #include <vanetza/security/signature.hpp>
 #include <boost/optional/optional.hpp>
 #include <memory>
@@ -27,8 +28,8 @@ public:
      * \param data buffer with plaintext data
      * \return calculated signature
      */
-    virtual EcdsaSignature sign_data(const ecdsa256::PrivateKey& private_key, const ByteBuffer& data) = 0;
-
+    virtual Signature sign_data(const generic_key::PrivateKey& private_key, const ByteBuffer& data) = 0;
+    
     /**
      * \brief try to verify data using public key and signature
      *
@@ -37,8 +38,9 @@ public:
      * \param sig signature of data
      * \return true if the data could be verified
      */
-    virtual bool verify_data(const ecdsa256::PublicKey& public_key, const ByteBuffer& data, const EcdsaSignature& sig) = 0;
 
+    virtual bool verify_data(const generic_key::PublicKey& public_key, const ByteBuffer& data, const Signature& sig) = 0;
+    
     /**
      * \brief decompress a possibly compressed elliptic curve point
      *

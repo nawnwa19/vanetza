@@ -2,14 +2,15 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 #include <iostream>
 
-using namespace vanetza;
+using namespace vanetza; 
 using namespace vanetza::security;
 
-SecurityBaseCase::SecurityBaseCase() :
+SecurityBaseCase::SecurityBaseCase(const std::string& sig_key_type) :
     runtime(Clock::at(boost::posix_time::microsec_clock::universal_time())),
+    signature_key_type(sig_key_type),
     crypto_backend(create_backend("default")),
     certificate_cache(runtime),
-    certificate_provider(runtime),
+    certificate_provider(runtime,signature_key_type),
     certificate_validator(*crypto_backend, certificate_cache, trust_store),
     sign_header_policy(runtime, positioning),
     sign_service(straight_sign_service(certificate_provider, *crypto_backend, sign_header_policy)),

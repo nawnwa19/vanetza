@@ -22,6 +22,7 @@ int main(int argc, const char** argv)
     po::options_description options("Allowed options");
     options.add_options()
         ("help", "Print out available options.")
+        ("algorithm,g", po::value<std::string>()->default_value("ecdsa256"), "Signature Algorithm type")
         ("link-layer,l", po::value<std::string>()->default_value("ethernet"), "Link layer type")
         ("interface,i", po::value<std::string>()->default_value("lo"), "Network interface to use.")
         ("mac-address", po::value<std::string>(), "Override the network interface's MAC address.")
@@ -116,12 +117,12 @@ int main(int argc, const char** argv)
             std::cerr << "Requested positioning method is not available\n";
             return 1;
         }
-
+        
         auto security = create_security_entity(vm, trigger.runtime(), *positioning);
         if (security) {
             mib.itsGnSecurity = true;
         }
-
+        
         RouterContext context(mib, trigger, *positioning, security.get());
         context.require_position_fix(vm.count("require-gnss-fix") > 0);
         context.set_link_layer(link_layer.get());

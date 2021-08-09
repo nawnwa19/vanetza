@@ -14,7 +14,7 @@ namespace security
  * \param key_path file to load the key from
  * \return loaded key
  */
-ecdsa256::KeyPair load_private_key_from_file(const std::string& key_path);
+generic_key::KeyPair load_private_key_from_file(const std::string& key_path,const std::string& sig_key_type);
 
 /**
  * \brief Loads a public key from a file

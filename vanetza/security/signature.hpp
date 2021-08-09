@@ -8,6 +8,8 @@
 #include <boost/variant/variant.hpp>
 #include <future>
 
+#include <liboqs-cpp/include/oqs_cpp.h>
+
 namespace vanetza
 {
 namespace security
@@ -33,8 +35,15 @@ private:
     std::size_t m_bytes;
 };
 
+
+struct OqsSignature
+{
+    OqsSignature(const std::size_t i = 0):S(i){};
+    oqs::bytes S;
+};
+
 /// Signature specified in TS 103 097 v1.2.1, section 4.2.8
-typedef boost::variant<EcdsaSignature, EcdsaSignatureFuture> Signature;
+typedef boost::variant<EcdsaSignature, EcdsaSignatureFuture, OqsSignature> Signature;
 
 /**
  * brief Determines PublicKeyAlgorithm of a given Signature
@@ -42,6 +51,14 @@ typedef boost::variant<EcdsaSignature, EcdsaSignatureFuture> Signature;
  * \return PublicKeyAlgorithm
  */
 PublicKeyAlgorithm get_type(const Signature&);
+
+
+/**
+ * \brief Calculates size of a OqsSignature
+ * \param signature
+ * \return number of octets needed for serialization
+ */
+size_t get_size(const OqsSignature&);
 
 /**
  * \brief Calculates size of a EcdsaSignature
@@ -72,6 +89,17 @@ size_t get_size(const Signature&);
 void serialize(OutputArchive&, const Signature&);
 void serialize(OutputArchive&, const EcdsaSignature&);
 void serialize(OutputArchive&, const EcdsaSignatureFuture&);
+void serialize(OutputArchive&, const OqsSignature&);
+
+/**
+ * \brief Deserializes an EcdsaSignature from a binary archive
+ *  Requires PublicKeyAlgorithm for determining the signature size
+ * \param ar with a serialized EcdsaSignature at the beginning
+ * \param signature to deserialize
+ * \param public_key_algorithm to determine the size of the signature
+ * \return size of the deserialized EcdsaSignature
+ */
+size_t deserialize(InputArchive&, OqsSignature&, const PublicKeyAlgorithm&);
 
 /**
  * \brief Deserializes an EcdsaSignature from a binary archive
@@ -103,9 +131,10 @@ ByteBuffer extract_signature_buffer(const Signature& sig);
  * \param sig Signature variant (of some type)
  * \return ECDSA signature (optionally)
  */
-boost::optional<EcdsaSignature> extract_ecdsa_signature(const Signature& sig);
+boost::optional<Signature> extract_signature(const Signature& sig);
 
 } // namespace security
 } // namespace vanetza
+
 
 #endif /* SIGNATURE_HPP_ZWPLNDVE */

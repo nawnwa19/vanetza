@@ -12,4 +12,4 @@ add_executable(benchmark
 )
 
 set_target_properties(benchmark PROPERTIES INCLUDE_DIRECTORIES ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(benchmark Boost::program_options vanetza)
+target_link_libraries(benchmark Boost::program_options vanetza -loqs)

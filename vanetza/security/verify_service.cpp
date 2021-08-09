@@ -237,7 +237,7 @@ VerifyService straight_verify_service(const Runtime& rt, CertificateProvider& ce
                     break;
             }
         }
-
+        
         if (possible_certificates.size() == 0) {
             confirm.report = VerificationReport::Signer_Certificate_Not_Found;
             confirm.certificate_id = signer_hash;
@@ -261,18 +261,18 @@ VerifyService straight_verify_service(const Runtime& rt, CertificateProvider& ce
             return confirm;
         }
 
-        if (PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256 != get_type(*signature)) {
-            confirm.report = VerificationReport::False_Signature;
-            return confirm;
-        }
+        // if (PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256 != get_type(*signature)) {
+        //     confirm.report = VerificationReport::False_Signature;
+        //     return confirm;
+        // }
 
         // check the size of signature.R and siganture.s
-        auto ecdsa = extract_ecdsa_signature(*signature);
-        const auto field_len = field_size(PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256);
-        if (!ecdsa || ecdsa->s.size() != field_len) {
-            confirm.report = VerificationReport::False_Signature;
-            return confirm;
-        }
+        auto ecdsa = extract_signature(*signature);
+        // const auto field_len = field_size(PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256);
+        // if (!ecdsa || ecdsa->s.size() != field_len) {
+        //     confirm.report = VerificationReport::False_Signature;
+        //     return confirm;
+        // }
 
         // verify payload signature with given signature
         ByteBuffer payload = convert_for_signing(secured_message, secured_message.trailer_fields);
@@ -286,7 +286,7 @@ VerifyService straight_verify_service(const Runtime& rt, CertificateProvider& ce
                 return confirm;
             }
 
-            boost::optional<ecdsa256::PublicKey> public_key = get_public_key(cert, backend);
+            boost::optional<generic_key::PublicKey> public_key = get_public_key(cert, backend);
 
             // public key could not be extracted
             if (!public_key) {
@@ -307,10 +307,11 @@ VerifyService straight_verify_service(const Runtime& rt, CertificateProvider& ce
             if (signer_info && get_type(*signer_info) == SignerInfoType::Certificate_Digest_With_SHA256) {
                 // assume a hash collision since we got only a digest with message
                 confirm.report = VerificationReport::Signer_Certificate_Not_Found;
-            } else {
+                } 
+                else {
                 // signature does not match the certificate received with this message
                 confirm.report = VerificationReport::False_Signature;
-            }
+                }
 
             confirm.certificate_id = signer_hash;
             sign_policy.request_unrecognized_certificate(signer_hash);
@@ -323,7 +324,7 @@ VerifyService straight_verify_service(const Runtime& rt, CertificateProvider& ce
             confirm.certificate_validity = CertificateInvalidReason::Off_Region;
             return confirm;
         }
-
+        
         CertificateValidity cert_validity = CertificateValidity::valid();
         if (!possible_certificates_from_cache) { // certificates from cache are already verified as trusted
             cert_validity = certs.check_certificate(*signer);
@@ -334,7 +335,7 @@ VerifyService straight_verify_service(const Runtime& rt, CertificateProvider& ce
         // if certificate could not be verified return correct DecapReport
         if (!cert_validity) {
             confirm.report = VerificationReport::Invalid_Certificate;
-
+            
             if (cert_validity.reason() == CertificateInvalidReason::Unknown_Signer) {
                 if (get_type(signer->signer_info) == SignerInfoType::Certificate_Digest_With_SHA256) {
                     auto signer_hash = boost::get<HashedId8>(signer->signer_info);

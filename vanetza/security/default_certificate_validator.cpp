@@ -173,7 +173,7 @@ DefaultCertificateValidator::DefaultCertificateValidator(Backend& backend, Certi
 }
 
 CertificateValidity DefaultCertificateValidator::check_certificate(const Certificate& certificate)
-{
+{   
     if (!extract_validity_time(certificate)) {
         return CertificateInvalidReason::Broken_Time_Period;
     }
@@ -196,7 +196,7 @@ CertificateValidity DefaultCertificateValidator::check_certificate(const Certifi
     HashedId8 signer_hash = boost::get<HashedId8>(certificate.signer_info);
 
     // try to extract ECDSA signature
-    boost::optional<EcdsaSignature> sig = extract_ecdsa_signature(certificate.signature);
+    boost::optional<Signature> sig = extract_signature(certificate.signature);
     if (!sig) {
         return CertificateInvalidReason::Missing_Signature;
     }
@@ -216,7 +216,7 @@ CertificateValidity DefaultCertificateValidator::check_certificate(const Certifi
                 if (!check_consistency(certificate, possible_signer)) {
                     return CertificateInvalidReason::Inconsistent_With_Signer;
                 }
-
+                
                 return CertificateValidity::valid();
             }
         }

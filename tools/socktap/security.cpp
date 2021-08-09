@@ -68,6 +68,8 @@ std::unique_ptr<security::SecurityEntity>
 create_security_entity(const po::variables_map& vm, const Runtime& runtime, PositionProvider& positioning)
 {
     std::unique_ptr<security::SecurityEntity> security;
+    const std::string sig_algo_type = vm["algorithm"].as<std::string>();
+
     const std::string name = vm["security"].as<std::string>();
 
     if (name.empty() || name == "none") {
@@ -89,7 +91,23 @@ create_security_entity(const po::variables_map& vm, const Runtime& runtime, Posi
             const std::string& certificate_key_path = vm["certificate-key"].as<std::string>();
 
             auto authorization_ticket = security::load_certificate_from_file(certificate_path);
-            auto authorization_ticket_key = security::load_private_key_from_file(certificate_key_path);
+            auto authorization_ticket_key = security::load_private_key_from_file(certificate_key_path,sig_algo_type);
+
+            auto visitor = security::generic_key::compose
+            (
+                [&](const security::ecdsa256::KeyPair &key_pair) 
+                {
+                    return security::generic_key::PrivateKey {key_pair.private_key};
+                },
+
+                // For OQS later
+                [&](const security::generic_key::KeyPairOQS &key_pair) 
+                {
+                    return security::generic_key::PrivateKey {key_pair.private_key};
+                }
+            );
+
+            auto at_key = boost::apply_visitor(visitor,authorization_ticket_key);
 
             std::list<security::Certificate> chain;
 
@@ -106,9 +124,9 @@ create_security_entity(const po::variables_map& vm, const Runtime& runtime, Posi
                 }
             }
 
-            context->cert_provider.reset(new security::StaticCertificateProvider(authorization_ticket, authorization_ticket_key.private_key, chain));
+            context->cert_provider.reset(new security::StaticCertificateProvider(authorization_ticket, at_key, chain));
         } else {
-            context->cert_provider.reset(new security::NaiveCertificateProvider(runtime));
+            context->cert_provider.reset(new security::NaiveCertificateProvider(runtime,sig_algo_type));
         }
 
         if (vm.count("trusted-certificate")) {

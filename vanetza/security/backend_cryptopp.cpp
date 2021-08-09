@@ -5,7 +5,8 @@
 #include <cassert>
 #include <iterator>
 #include <functional>
-
+#include <iostream>
+#include <boost/variant.hpp>
 namespace vanetza
 {
 namespace security
@@ -19,9 +20,38 @@ BackendCryptoPP::BackendCryptoPP() :
 {
 }
 
-EcdsaSignature BackendCryptoPP::sign_data(const ecdsa256::PrivateKey& generic_key, const ByteBuffer& data)
+Signature BackendCryptoPP::sign_data(const generic_key::PrivateKey& generic_key, const ByteBuffer& data)
 {
-    return sign_data(m_private_cache[generic_key], data);
+     auto start = std::chrono::high_resolution_clock::now(); // start timer
+     auto visitor = generic_key::compose(
+         // For ECDSA
+         [&](const ecdsa256::PrivateKey &key)
+         {
+             return Signature{sign_data(m_private_cache[key], data)};
+             auto diff = std::chrono::high_resolution_clock::now() - start; // get difference
+             auto msec = std::chrono::duration_cast<std::chrono::microseconds>(diff);
+             std::cout << "BackendCryptoppEcdsa::sign_data took: " << msec.count() << " microseconds" << std::endl;
+         },
+
+         // For OQS
+         [&](const generic_key::PrivateKeyOQS &key)
+         {
+             // Get the type and name of private key
+            std::string sig_name = get_string_from_algo(key.m_type);
+             // generic_key::PrivateKey is also in the TYPE expected i.e bytes
+             // Instantiate a signature object
+             oqs::Signature signer{sig_name, key.priv_K};
+
+             // Sign the message
+             OqsSignature signature;
+             signature.S = signer.sign(data);
+             // std::cout << "Sign size " << signature.S.size() << std::endl;
+             auto diff = std::chrono::high_resolution_clock::now() - start; // get difference
+             auto msec = std::chrono::duration_cast<std::chrono::microseconds>(diff);
+             std::cout << "BackendCryptoppOQS::sign_data took: " << msec.count() << " microseconds" << std::endl;
+             return Signature{signature};
+         });
+     return boost::apply_visitor(visitor, generic_key);
 }
 
 EcdsaSignature BackendCryptoPP::sign_data(const PrivateKey& private_key, const ByteBuffer& data)
@@ -47,10 +77,33 @@ EcdsaSignature BackendCryptoPP::sign_data(const PrivateKey& private_key, const B
     return ecdsa_signature;
 }
 
-bool BackendCryptoPP::verify_data(const ecdsa256::PublicKey& generic_key, const ByteBuffer& msg, const EcdsaSignature& sig)
+bool BackendCryptoPP::verify_data(const generic_key::PublicKey& generic_key, const ByteBuffer& msg, const Signature& sig)
 {
     const ByteBuffer sigbuf = extract_signature_buffer(sig);
-    return verify_data(m_public_cache[generic_key], msg, sigbuf);
+
+    auto visitor = generic_key::compose(
+        // For ECDSA
+        [&](const EcdsaSignature &sig)
+        {
+            auto ecdsa_key = boost::get<ecdsa256::PublicKey>(generic_key);
+            auto pub = internal_public_key(ecdsa_key);
+            return verify_data(m_public_cache[ecdsa_key], msg, sigbuf);
+        },
+        [&](const EcdsaSignatureFuture &sig)
+        {
+            return false; // future is optional
+        },
+        // For OQS
+        [&](const OqsSignature &sig)
+        {
+            // Get the type and name of private key
+            auto oqs_key = boost::get<generic_key::PublicKeyOQS>(generic_key);
+            std::string sig_name = get_string_from_algo(oqs_key.m_type);
+            oqs::Signature verifier{sig_name};
+            return verifier.verify(msg, sigbuf, oqs_key.pub_K);
+        });
+
+    return boost::apply_visitor(visitor, sig);
 }
 
 bool BackendCryptoPP::verify_data(const PublicKey& public_key, const ByteBuffer& msg, const ByteBuffer& sig)
@@ -114,21 +167,52 @@ boost::optional<Uncompressed> BackendCryptoPP::decompress_point(const EccPoint& 
     }
 }
 
-ecdsa256::KeyPair BackendCryptoPP::generate_key_pair()
+generic_key::KeyPair BackendCryptoPP::generate_key_pair(const std::string& sig_key_type)
 {
-    ecdsa256::KeyPair kp;
-    auto private_key = generate_private_key();
-    auto& private_exponent = private_key.GetPrivateExponent();
-    assert(kp.private_key.key.size() >= private_exponent.ByteCount());
-    private_exponent.Encode(kp.private_key.key.data(), kp.private_key.key.size());
+    generic_key::KeyPair g_kp;
+    // For ECDSA
+    PublicKeyAlgorithm type = get_algo_from_string(sig_key_type);
+    switch (type)
+    {
+    case PublicKeyAlgorithm::ECIES_NISTP256:  
+    case PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256:
+    {
+        ecdsa256::KeyPair kp;
+        auto private_key = generate_private_key();
+        auto& private_exponent = private_key.GetPrivateExponent();
+        assert(kp.private_key.key.size() >= private_exponent.ByteCount());
+        private_exponent.Encode(kp.private_key.key.data(), kp.private_key.key.size());
 
-    auto public_key = generate_public_key(private_key);
-    auto& public_element = public_key.GetPublicElement();
-    assert(kp.public_key.x.size() >= public_element.x.ByteCount());
-    assert(kp.public_key.y.size() >= public_element.y.ByteCount());
-    public_element.x.Encode(kp.public_key.x.data(), kp.public_key.x.size());
-    public_element.y.Encode(kp.public_key.y.data(), kp.public_key.y.size());
-    return kp;
+        auto public_key = generate_public_key(private_key);
+        auto& public_element = public_key.GetPublicElement();
+        assert(kp.public_key.x.size() >= public_element.x.ByteCount());
+        assert(kp.public_key.y.size() >= public_element.y.ByteCount());
+        public_element.x.Encode(kp.public_key.x.data(), kp.public_key.x.size());
+        public_element.y.Encode(kp.public_key.y.data(), kp.public_key.y.size());
+
+        g_kp = generic_key::KeyPair{std::move(kp)};
+        break;
+    }
+    // For OQS
+    case PublicKeyAlgorithm::DILITHIUM2:
+    {
+        generic_key::KeyPairOQS kp;
+        kp.private_key.m_type = get_algo_from_string(sig_key_type);
+        kp.public_key.m_type = kp.private_key.m_type;
+
+
+        oqs::Signature signer{sig_key_type};
+
+        kp.public_key.pub_K = signer.generate_keypair();
+        kp.private_key.priv_K = signer.export_secret_key();
+        g_kp = generic_key::KeyPair{std::move(kp)};
+        break;
+    }
+    default:
+        assert(false && "Unknown signature key type");
+        break;
+    };
+    return g_kp;
 }
 
 BackendCryptoPP::PrivateKey BackendCryptoPP::generate_private_key()

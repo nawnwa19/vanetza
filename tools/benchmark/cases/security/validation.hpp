@@ -6,6 +6,7 @@
 class SecurityValidationCase : public SecurityBaseCase
 {
 public:
+    SecurityValidationCase(std::string& sig_key_type);
     bool parse(const std::vector<std::string>&) override;
     int execute() override;
 

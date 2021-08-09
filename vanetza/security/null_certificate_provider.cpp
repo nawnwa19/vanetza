@@ -52,9 +52,9 @@ std::list<Certificate> NullCertificateProvider::own_chain()
     return std::list<Certificate> {};
 }
 
-const ecdsa256::PrivateKey& NullCertificateProvider::own_private_key()
+const generic_key::PrivateKey& NullCertificateProvider::own_private_key()
 {
-    static const ecdsa256::PrivateKey null_key {};
+    static const generic_key::PrivateKey null_key {};
     return null_key;
 }
 

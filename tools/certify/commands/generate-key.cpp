@@ -8,9 +8,16 @@
 #include <cryptopp/sha.h>
 #include <iostream>
 #include <stdexcept>
+#include <vanetza/security/public_key.hpp>
+#include <fstream>
+#include <vanetza/security/generic_key.hpp>
+#include <vanetza/common/archives.hpp>
 
 namespace po = boost::program_options;
 using namespace CryptoPP;
+GenerateKeyCommand::GenerateKeyCommand(const std::string& sig_key_type):m_signature_key_type(sig_key_type){
+
+}
 
 bool GenerateKeyCommand::parse(const std::vector<std::string>& opts)
 {
@@ -45,22 +52,54 @@ bool GenerateKeyCommand::parse(const std::vector<std::string>& opts)
 
 int GenerateKeyCommand::execute()
 {
-    std::cout << "Generating key..." << std::endl;
+    int result = 0;
+    std::cout << "Generating " << m_signature_key_type << " key..." << std::endl;
+    namespace vs = vanetza::security;
+    vs::PublicKeyAlgorithm type = vs::get_algo_from_string(m_signature_key_type);
+    switch (type) {
+        case vs::PublicKeyAlgorithm::ECIES_NISTP256:
+        case vs::PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256:{
+            AutoSeededRandomPool rng;
+            OID oid(CryptoPP::ASN1::secp256r1());
+            ECDSA<ECP, SHA256>::PrivateKey private_key;
+            private_key.Initialize(rng, oid);
 
-    AutoSeededRandomPool rng;
-    OID oid(CryptoPP::ASN1::secp256r1());
-    ECDSA<ECP, SHA256>::PrivateKey private_key;
-    private_key.Initialize(rng, oid);
+            if (!private_key.Validate(rng, 3)) {
+                throw std::runtime_error("Private key validation failed");
+            }
 
-    if (!private_key.Validate(rng, 3)) {
-        throw std::runtime_error("Private key validation failed");
+            ByteQueue queue;
+            private_key.Save(queue);
+            CryptoPP::FileSink file(output.c_str());
+            queue.CopyTo(file);
+            file.MessageEnd();
+            break;
+        }
+        case vs::PublicKeyAlgorithm::UNKNOWN:
+            result = -1;
+            break;
+        default: { // For all OQS types
+            vs::generic_key::KeyPairOQS kp;
+            kp.private_key.m_type = vs::get_algo_from_string(m_signature_key_type);
+            kp.public_key.m_type = kp.private_key.m_type;
+            
+            oqs::Signature signer{m_signature_key_type};
+            kp.public_key.pub_K = signer.generate_keypair();
+            kp.private_key.priv_K = signer.export_secret_key();
+
+            // Store the exported private key into a file
+            std::ofstream fout(output, std::ios::binary);
+            vanetza::OutputArchive ar(fout);
+            try
+            {
+                vs::generic_key::serialize(ar,kp,type);
+            }
+            catch(const std::exception& e)
+            {
+                std::cerr << e.what() << '\n';
+            }
+            break;
+        } 
     }
-
-    ByteQueue queue;
-    private_key.Save(queue);
-    CryptoPP::FileSink file(output.c_str());
-    queue.CopyTo(file);
-    file.MessageEnd();
-
-    return 0;
+    return result;
 }

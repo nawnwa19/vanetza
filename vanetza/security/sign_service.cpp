@@ -18,15 +18,33 @@ namespace
  * \brief signature used as placeholder until final signature is calculated
  * \return placeholder containing dummy data
  */
-Signature signature_placeholder()
+Signature signature_placeholder(const PublicKeyAlgorithm& pka = PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256)
 {
-    const auto size = field_size(PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256);
-    EcdsaSignature ecdsa;
-    ecdsa.s.resize(size, 0x00);
-    X_Coordinate_Only coordinate;
-    coordinate.x.resize(size, 0x00);
-    ecdsa.R = std::move(coordinate);
-    return Signature { std::move(ecdsa) };
+    Signature result;
+    switch (pka)
+    {
+    case PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256:
+    {
+        const auto size = field_size(pka);
+        EcdsaSignature ecdsa;
+        ecdsa.s.resize(size, 0x00);
+        X_Coordinate_Only coordinate;
+        coordinate.x.resize(size, 0x00);
+        ecdsa.R = std::move(coordinate);
+        result = ecdsa;
+        break;
+    }
+    case PublicKeyAlgorithm::DILITHIUM2:
+    {
+        const auto size = field_size_signature(pka);
+        OqsSignature oqs_sig(size);
+        result = oqs_sig;
+    }
+    default:
+        break;
+    }
+
+    return result;
 }
 
 } // namespace
@@ -41,10 +59,24 @@ SignService straight_sign_service(CertificateProvider& certificate_provider, Bac
         confirm.secured_message.header_fields = sign_header_policy.prepare_header(request, certificate_provider);
 
         const auto& private_key = certificate_provider.own_private_key();
-        static const Signature placeholder = signature_placeholder();
+        static Signature placeholder;
+
+        auto visitor = generic_key::compose(
+            // For ECDSA
+            [&](const ecdsa256::PrivateKey &key) {
+                placeholder = signature_placeholder(PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256);
+            },
+
+            // For OQS
+            [&](const generic_key::PrivateKeyOQS &key) {
+                placeholder = signature_placeholder(PublicKeyAlgorithm::DILITHIUM2);
+            });
+        boost::apply_visitor(visitor, private_key);
+
         static const std::list<TrailerField> trailer_fields = { placeholder };
 
         ByteBuffer data_buffer = convert_for_signing(confirm.secured_message, trailer_fields);
+        
         TrailerField trailer_field = backend.sign_data(private_key, data_buffer);
         confirm.secured_message.trailer_fields.push_back(trailer_field);
         return confirm;
@@ -55,22 +87,22 @@ SignService deferred_sign_service(CertificateProvider& certificate_provider, Bac
 {
     return [&](SignRequest&& request) -> SignConfirm {
         SignConfirm confirm;
-        confirm.secured_message.payload.type = PayloadType::Signed;
-        confirm.secured_message.payload.data = std::move(request.plain_message);
-        confirm.secured_message.header_fields = sign_header_policy.prepare_header(request, certificate_provider);
+        // confirm.secured_message.payload.type = PayloadType::Signed;
+        // confirm.secured_message.payload.data = std::move(request.plain_message);
+        // confirm.secured_message.header_fields = sign_header_policy.prepare_header(request, certificate_provider);
 
-        const auto& private_key = certificate_provider.own_private_key();
-        static const Signature placeholder = signature_placeholder();
-        static const size_t signature_size = get_size(placeholder);
-        static const std::list<TrailerField> trailer_fields = { placeholder };
+        // const auto& private_key = certificate_provider.own_private_key();
+        // static const Signature placeholder = signature_placeholder();
+        // static const size_t signature_size = get_size(placeholder);
+        // static const std::list<TrailerField> trailer_fields = { placeholder };
 
-        const SecuredMessage& secured_message = confirm.secured_message;
-        auto future = std::async(std::launch::deferred, [&backend, secured_message, private_key]() {
-            ByteBuffer data = convert_for_signing(secured_message, trailer_fields);
-            return backend.sign_data(private_key, data);
-        });
-        EcdsaSignatureFuture signature(future.share(), signature_size);
-        confirm.secured_message.trailer_fields.push_back(signature);
+        // const SecuredMessage& secured_message = confirm.secured_message;
+        // auto future = std::async(std::launch::deferred, [&backend, secured_message, private_key]() {
+        //     ByteBuffer data = convert_for_signing(secured_message, trailer_fields);
+        //     return backend.sign_data(private_key, data);
+        // });
+        // EcdsaSignatureFuture signature(future.share(), signature_size);
+        // confirm.secured_message.trailer_fields.push_back(signature); 
         return confirm;
     };
 }

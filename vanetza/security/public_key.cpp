@@ -2,6 +2,8 @@
 #include <vanetza/security/public_key.hpp>
 #include <boost/variant/apply_visitor.hpp>
 #include <boost/variant/static_visitor.hpp>
+#include <string>
+#include <vanetza/common/enum_helper.hpp>
 
 namespace vanetza
 {
@@ -20,6 +22,11 @@ PublicKeyAlgorithm get_type(const PublicKey& key)
         {
             return PublicKeyAlgorithm::ECIES_NISTP256;
         }
+        PublicKeyAlgorithm operator()(const dilithium2& dil2)
+        {
+            return PublicKeyAlgorithm::DILITHIUM2;
+        }
+
     };
 
     public_key_visitor visit;
@@ -43,6 +50,10 @@ void serialize(OutputArchive& ar, const PublicKey& key)
             serialize(m_archive, ecies.supported_symm_alg);
             serialize(m_archive, ecies.public_key, m_algo);
         }
+        void operator()(const dilithium2& dil2)
+        {
+            serialize(m_archive, dil2.public_key, m_algo);
+        }
         OutputArchive& m_archive;
         PublicKeyAlgorithm m_algo;
     };
@@ -63,9 +74,47 @@ std::size_t field_size(PublicKeyAlgorithm algo)
         case PublicKeyAlgorithm::ECIES_NISTP256:
             size = 32;
             break;
+        case PublicKeyAlgorithm::DILITHIUM2:
+            size = 1312;
+            break;
     }
     return size;
 }
+
+std::size_t field_size_signature(PublicKeyAlgorithm algo)
+{
+    size_t size = 0;
+    switch (algo) {
+        case PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256:
+            size = 32;
+            break;
+        case PublicKeyAlgorithm::ECIES_NISTP256:
+            size = 32;
+            break;
+        case PublicKeyAlgorithm::DILITHIUM2:
+            size = 2420;
+            break;
+    }
+    return size;
+}
+
+std::size_t field_size_private(PublicKeyAlgorithm algo)
+{
+    size_t size = 0;
+    switch (algo) {
+        case PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256:
+            size = 32;
+            break;
+        case PublicKeyAlgorithm::ECIES_NISTP256:
+            size = 32;
+            break;
+        case PublicKeyAlgorithm::DILITHIUM2:
+            size = 2528;
+            break;
+    }
+    return size;
+}
+
 
 std::size_t field_size(SymmetricAlgorithm algo)
 {
@@ -99,6 +148,12 @@ size_t deserialize(InputArchive& ar, PublicKey& key)
             key = ecies;
             break;
         }
+        case PublicKeyAlgorithm::DILITHIUM2: {
+            dilithium2 dil2;
+            deserialize(ar, dil2.public_key, PublicKeyAlgorithm::DILITHIUM2);
+            key = dil2;
+            break;
+        }
         default:
             throw deserialization_error("Unknown PublicKeyAlgorithm");
             break;
@@ -119,11 +174,40 @@ size_t get_size(const PublicKey& key)
         {
             return get_size(key.public_key) + sizeof(key.supported_symm_alg);
         }
+        size_t operator()(dilithium2 key)
+        {
+            return get_size(key.public_key);
+        }
+        
     };
     publicKey_visitor visit;
     size += boost::apply_visitor(visit, key);
     return size;
 }
+
+// String and enum to and from conversion
+template <>
+char const* enumStrings<PublicKeyAlgorithm>::data[] = {"ecdsa256", "ecies256",
+                                                       "Dilithium2"};
+
+PublicKeyAlgorithm get_algo_from_string(const std::string &sig_key_type)
+{
+    PublicKeyAlgorithm pka;
+    std::stringstream ss(sig_key_type);
+    ss >> enumFromString(pka);
+    return pka;
+}
+
+std::string get_string_from_algo(const PublicKeyAlgorithm &sig_key_type)
+{
+     std::stringstream ss;
+     ss << enumToString(sig_key_type);
+     return ss.str();
+}
+
+
+
+
 
 } // namespace security
 } // namespace vanetza
