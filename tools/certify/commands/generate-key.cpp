@@ -57,7 +57,6 @@ int GenerateKeyCommand::execute()
     namespace vs = vanetza::security;
     vs::PublicKeyAlgorithm type = vs::get_algo_from_string(m_signature_key_type);
     switch (type) {
-        case vs::PublicKeyAlgorithm::ECIES_NISTP256:
         case vs::PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256:{
             AutoSeededRandomPool rng;
             OID oid(CryptoPP::ASN1::secp256r1());
@@ -75,6 +74,7 @@ int GenerateKeyCommand::execute()
             file.MessageEnd();
             break;
         }
+        case vs::PublicKeyAlgorithm::ECIES_NISTP256:
         case vs::PublicKeyAlgorithm::UNKNOWN:
             result = -1;
             break;

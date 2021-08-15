@@ -124,10 +124,11 @@ Certificate NaiveCertificateProvider::generate_authorization_ticket()
 
         // For OQS
         [&](const generic_key::KeyPairOQS &key_pair) {
-            dilithium2 dil2;
-            dil2.public_key.K = key_pair.public_key.pub_K;
+            oqs_nist oqs_key;
+            oqs_key.type = key_pair.public_key.m_type;
+            oqs_key.public_key.K = key_pair.public_key.pub_K;
             VerificationKey verification_key;
-            verification_key.key = dil2;
+            verification_key.key = oqs_key;
             certificate.subject_attributes.push_back(verification_key);
         });
 
@@ -210,10 +211,11 @@ Certificate NaiveCertificateProvider::generate_aa_certificate(const std::string&
         // For OQS
         [&](const generic_key::KeyPairOQS &key_pair)
         {
-            dilithium2 dil2;
-            dil2.public_key.K = key_pair.public_key.pub_K;
+            oqs_nist oqs_key;
+            oqs_key.type = key_pair.public_key.m_type;
+            oqs_key.public_key.K = key_pair.public_key.pub_K;
             VerificationKey verification_key;
-            verification_key.key = dil2;
+            verification_key.key = oqs_key;
             certificate.subject_attributes.push_back(verification_key);
         });
 
@@ -290,10 +292,11 @@ Certificate NaiveCertificateProvider::generate_root_certificate(const std::strin
         // For OQS
         [&](const generic_key::KeyPairOQS &key_pair)
         {
-            dilithium2 dil2;
-            dil2.public_key.K = key_pair.public_key.pub_K;
+            oqs_nist oqs_key;
+            oqs_key.type = key_pair.public_key.m_type;
+            oqs_key.public_key.K = key_pair.public_key.pub_K;
             VerificationKey verification_key;
-            verification_key.key = dil2;
+            verification_key.key = oqs_key;
             certificate.subject_attributes.push_back(verification_key);
         });
 

@@ -41,11 +41,11 @@ Signature BackendCryptoPP::sign_data(const generic_key::PrivateKey& generic_key,
              // generic_key::PrivateKey is also in the TYPE expected i.e bytes
              // Instantiate a signature object
              oqs::Signature signer{sig_name, key.priv_K};
-
+             
              // Sign the message
-             OqsSignature signature;
+             OqsSignature signature(key.m_type);
              signature.S = signer.sign(data);
-             // std::cout << "Sign size " << signature.S.size() << std::endl;
+             std::cout << "Sign size " << signature.S.size() << std::endl;
              auto diff = std::chrono::high_resolution_clock::now() - start; // get difference
              auto msec = std::chrono::duration_cast<std::chrono::microseconds>(diff);
              std::cout << "BackendCryptoppOQS::sign_data took: " << msec.count() << " microseconds" << std::endl;
@@ -173,8 +173,7 @@ generic_key::KeyPair BackendCryptoPP::generate_key_pair(const std::string& sig_k
     // For ECDSA
     PublicKeyAlgorithm type = get_algo_from_string(sig_key_type);
     switch (type)
-    {
-    case PublicKeyAlgorithm::ECIES_NISTP256:  
+    { 
     case PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256:
     {
         ecdsa256::KeyPair kp;
@@ -193,13 +192,15 @@ generic_key::KeyPair BackendCryptoPP::generate_key_pair(const std::string& sig_k
         g_kp = generic_key::KeyPair{std::move(kp)};
         break;
     }
+    case PublicKeyAlgorithm::ECIES_NISTP256: 
+    case PublicKeyAlgorithm::UNKNOWN:
+        assert(false && "Unknown signature key type");
     // For OQS
-    case PublicKeyAlgorithm::DILITHIUM2:
+    default:
     {
         generic_key::KeyPairOQS kp;
         kp.private_key.m_type = get_algo_from_string(sig_key_type);
         kp.public_key.m_type = kp.private_key.m_type;
-
 
         oqs::Signature signer{sig_key_type};
 
@@ -208,9 +209,6 @@ generic_key::KeyPair BackendCryptoPP::generate_key_pair(const std::string& sig_k
         g_kp = generic_key::KeyPair{std::move(kp)};
         break;
     }
-    default:
-        assert(false && "Unknown signature key type");
-        break;
     };
     return g_kp;
 }

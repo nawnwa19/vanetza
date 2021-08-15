@@ -44,7 +44,7 @@ void deserialize(InputArchive& ar, KeyPairOQS& key_pair,
     auto& public_key = key_pair.public_key;
 
     // Deserialize the type and assert if no match
-    PublicKeyAlgorithm pka_recovered;
+    PublicKeyAlgorithm pka_recovered = PublicKeyAlgorithm::UNKNOWN;
     deserialize(ar, pka_recovered);
     assert(pka_recovered == algo);
     private_key.m_type = pka_recovered;
@@ -75,10 +75,10 @@ generic_key::PublicKeyOQS get_genericPublicKey_from_PublicKey(
         // For ECIES future
         [&](const ecies_nistp256& pub_key) { return oqs_key; },
 
-        // For DILITHIUM2
-        [&](const dilithium2& pub_key) {
+        // For OQS types
+        [&](const oqs_nist& pub_key) {
             oqs_key.pub_K = pub_key.public_key.K;
-            oqs_key.m_type = PublicKeyAlgorithm::DILITHIUM2;
+            oqs_key.m_type = pub_key.type;
             return oqs_key;
         });
 

@@ -18,7 +18,7 @@ std::unique_ptr<Command> parse_options(int argc, const char *argv[])
     global.add_options()
         ("command", po::value<std::string>(), "Command to execute.")
         ("subargs", po::value<std::vector<std::string>>(), "Arguments for command.")
-        ("algorithm", po::value<std::string>(&signature_key_type)->default_value("ecdsa256"), "ECDSA or Dilithium2")
+        ("algorithm", po::value<std::string>(&signature_key_type)->default_value("ecdsa256"), "ECDSA,Dilithium2/3/5,Falcon-512,Falcon-1024")
     ;
 
     po::positional_options_description pos;

@@ -23,6 +23,12 @@ enum class PublicKeyAlgorithm : uint8_t
     ECIES_NISTP256 = 1,
 
     DILITHIUM2 = 2,
+    DILITHIUM3 = 3,
+    DILITHIUM5 = 4,
+
+    FALCON_512 = 5,
+    FALCON_1024 = 6,
+
     UNKNOWN = 239
 };
 
@@ -39,15 +45,16 @@ struct ecies_nistp256
     EccPoint public_key;
 };
 
-// dilithium2 added for PQ
-struct dilithium2
+// Common OQS type added for PQ
+struct oqs_nist
 {
+    PublicKeyAlgorithm type;
     OqsPublicKey public_key;
 };
 
 
 /// Profile specified in TS 103 097 v1.2.1, section 4.2.4
-using PublicKey = boost::variant<ecdsa_nistp256_with_sha256, ecies_nistp256, dilithium2>;
+using PublicKey = boost::variant<ecdsa_nistp256_with_sha256, ecies_nistp256, oqs_nist>;
 
 /**
  * \brief Determines PublicKeyAlgorithm to a given PublicKey

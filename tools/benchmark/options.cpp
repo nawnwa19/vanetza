@@ -13,19 +13,18 @@ std::unique_ptr<Case> parse_options(int argc, const char *argv[])
     std::string signature_key_type;
     global.add_options()
         ("case", po::value<std::string>(), "Case to execute.")
-        ("algorithm", po::value<std::string>(&signature_key_type)->default_value("ecdsa256"), "ECDSA or Dilithium2")
-        ("subargs", po::value<std::vector<std::string>>(), "Arguments for case.");
+        ("subargs", po::value<std::vector<std::string>>(), "Arguments for case.")
+        ("algorithm", po::value<std::string>(&signature_key_type)->default_value("ecdsa256"), "ECDSA,Dilithium2/3/5,Falcon-512,Falcon-1024");
     
     po::positional_options_description pos;
-    // pos.add("case", 1);
-    // pos.add("algorithm", 2);
-    // pos.add("subargs", -1);
+    pos.add("case", 1);
+    pos.add("subargs", -1);
 
     po::variables_map vm;
 
     po::parsed_options parsed = po::command_line_parser(argc, argv)
         .options(global)
-        // .positional(pos)
+        .positional(pos)
         .allow_unregistered()
         .run();
 

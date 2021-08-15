@@ -38,7 +38,9 @@ private:
 
 struct OqsSignature
 {
-    OqsSignature(const std::size_t i = 0):S(i){};
+    OqsSignature(PublicKeyAlgorithm type)
+        : sig_type{type}, S(field_size_signature(sig_type)){};
+    PublicKeyAlgorithm sig_type;
     oqs::bytes S;
 };
 

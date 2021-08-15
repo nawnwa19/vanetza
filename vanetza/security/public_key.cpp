@@ -4,6 +4,7 @@
 #include <boost/variant/static_visitor.hpp>
 #include <string>
 #include <vanetza/common/enum_helper.hpp>
+#include <liboqs-cpp/include/oqs_cpp.h>
 
 namespace vanetza
 {
@@ -22,9 +23,9 @@ PublicKeyAlgorithm get_type(const PublicKey& key)
         {
             return PublicKeyAlgorithm::ECIES_NISTP256;
         }
-        PublicKeyAlgorithm operator()(const dilithium2& dil2)
+        PublicKeyAlgorithm operator()(const oqs_nist& oqs)
         {
-            return PublicKeyAlgorithm::DILITHIUM2;
+            return oqs.type;
         }
 
     };
@@ -50,9 +51,9 @@ void serialize(OutputArchive& ar, const PublicKey& key)
             serialize(m_archive, ecies.supported_symm_alg);
             serialize(m_archive, ecies.public_key, m_algo);
         }
-        void operator()(const dilithium2& dil2)
+        void operator()(const oqs_nist& oqs)
         {
-            serialize(m_archive, dil2.public_key, m_algo);
+            serialize(m_archive, oqs.public_key, oqs.type);
         }
         OutputArchive& m_archive;
         PublicKeyAlgorithm m_algo;
@@ -77,6 +78,20 @@ std::size_t field_size(PublicKeyAlgorithm algo)
         case PublicKeyAlgorithm::DILITHIUM2:
             size = 1312;
             break;
+        case PublicKeyAlgorithm::DILITHIUM3:
+            size = 1952;
+            break;
+        case PublicKeyAlgorithm::DILITHIUM5:
+            size = 2592;
+            break;
+        case PublicKeyAlgorithm::FALCON_512:
+            size = 897;
+            break;
+        case PublicKeyAlgorithm::FALCON_1024:
+            size = 1793;
+            break;
+        default:
+            assert(false && "Unknown signature algorithm");
     }
     return size;
 }
@@ -94,6 +109,20 @@ std::size_t field_size_signature(PublicKeyAlgorithm algo)
         case PublicKeyAlgorithm::DILITHIUM2:
             size = 2420;
             break;
+        case PublicKeyAlgorithm::DILITHIUM3:
+            size = 3293;
+            break;
+        case PublicKeyAlgorithm::DILITHIUM5:
+            size = 4595;
+            break;
+        case PublicKeyAlgorithm::FALCON_512:
+            size = 690;
+            break;
+        case PublicKeyAlgorithm::FALCON_1024:
+            size = 1330;
+            break;
+        default:
+            assert(false && "Unknown signature algorithm");
     }
     return size;
 }
@@ -111,6 +140,20 @@ std::size_t field_size_private(PublicKeyAlgorithm algo)
         case PublicKeyAlgorithm::DILITHIUM2:
             size = 2528;
             break;
+        case PublicKeyAlgorithm::DILITHIUM3:
+            size = 4000;
+            break;
+        case PublicKeyAlgorithm::DILITHIUM5:
+            size = 4864;
+            break;
+        case PublicKeyAlgorithm::FALCON_512:
+            size = 1281;
+            break;
+        case PublicKeyAlgorithm::FALCON_1024:
+            size = 2305;
+            break;
+        default:
+            assert(false && "Unknown signature algorithm");
     }
     return size;
 }
@@ -148,15 +191,15 @@ size_t deserialize(InputArchive& ar, PublicKey& key)
             key = ecies;
             break;
         }
-        case PublicKeyAlgorithm::DILITHIUM2: {
-            dilithium2 dil2;
-            deserialize(ar, dil2.public_key, PublicKeyAlgorithm::DILITHIUM2);
-            key = dil2;
+        case PublicKeyAlgorithm::UNKNOWN:
+            assert(false && "Unknown PublicKeyAlgorithm");
+        default: {
+            oqs_nist oqs;
+            oqs.type = type;
+            deserialize(ar, oqs.public_key,oqs.type);
+            key = oqs;
             break;
         }
-        default:
-            throw deserialization_error("Unknown PublicKeyAlgorithm");
-            break;
     }
     return get_size(key);
 }
@@ -174,11 +217,11 @@ size_t get_size(const PublicKey& key)
         {
             return get_size(key.public_key) + sizeof(key.supported_symm_alg);
         }
-        size_t operator()(dilithium2 key)
+        size_t operator()(oqs_nist key)
         {
             return get_size(key.public_key);
         }
-        
+
     };
     publicKey_visitor visit;
     size += boost::apply_visitor(visit, key);
@@ -187,12 +230,13 @@ size_t get_size(const PublicKey& key)
 
 // String and enum to and from conversion
 template <>
-char const* enumStrings<PublicKeyAlgorithm>::data[] = {"ecdsa256", "ecies256",
-                                                       "Dilithium2"};
+char const* enumStrings<PublicKeyAlgorithm>::data[] = {
+    "ecdsa256",   "ecies256",   "Dilithium2", "Dilithium3",
+    "Dilithium5", "Falcon-512", "Falcon-1024", "Unknown"};
 
 PublicKeyAlgorithm get_algo_from_string(const std::string &sig_key_type)
 {
-    PublicKeyAlgorithm pka;
+    PublicKeyAlgorithm pka = PublicKeyAlgorithm::UNKNOWN;
     std::stringstream ss(sig_key_type);
     ss >> enumFromString(pka);
     return pka;

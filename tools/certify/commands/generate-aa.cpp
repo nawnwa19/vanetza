@@ -132,11 +132,11 @@ int GenerateAaCommand::execute()
 
         // For OQS
         [&](const generic_key::KeyPairOQS& subject_key) {
-            // %% later %%
-            dilithium2 dil2;
-            dil2.public_key.K = subject_key.public_key.pub_K;
+            oqs_nist oqs_key;
+            oqs_key.public_key.K = subject_key.public_key.pub_K;
+            oqs_key.type = subject_key.public_key.m_type;
             VerificationKey verification_key;
-            verification_key.key = dil2;
+            verification_key.key = oqs_key;
             certificate.subject_attributes.push_back(verification_key);
         });
 

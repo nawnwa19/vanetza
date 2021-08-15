@@ -11,7 +11,7 @@ UdpLink::UdpLink(boost::asio::io_service& io_service, const ip::udp::endpoint& e
     multicast_endpoint_(endpoint),
     tx_socket_(io_service), rx_socket_(io_service),
     // rx_buffer_(2560, 0x00)
-    rx_buffer_(10000, 0x00)  // PQ signatures and key are kilobytes long
+    rx_buffer_(20000, 0x00)  // PQ signatures and key are kilobytes long
 {
     tx_socket_.open(multicast_endpoint_.protocol());
 

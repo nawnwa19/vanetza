@@ -25,7 +25,7 @@ PublicKeyAlgorithm get_type(const Signature& sig)
 
         PublicKeyAlgorithm operator()(const OqsSignature& sig)
         {
-            return PublicKeyAlgorithm::DILITHIUM2;
+            return sig.sig_type;
         }
     };
     Signature_visitor visit;
@@ -42,6 +42,11 @@ size_t get_size(const EcdsaSignature& sig)
 size_t get_size(const EcdsaSignatureFuture& sig)
 {
     return sig.size();
+}
+
+size_t get_size(const OqsSignature& sig)
+{
+    return sig.S.size();
 }
 
 size_t get_size(const Signature& sig)
@@ -61,7 +66,7 @@ size_t get_size(const Signature& sig)
 
         size_t operator()(const OqsSignature& sig)
         {
-            return sig.S.size();
+            return get_size(sig);
         }
     };
     Signature_visitor visit;
@@ -118,7 +123,7 @@ void serialize(OutputArchive& ar, const EcdsaSignatureFuture& sig)
 
 void serialize(OutputArchive& ar, const OqsSignature& sig)
 {
-    const PublicKeyAlgorithm algo = PublicKeyAlgorithm::DILITHIUM2;
+    const PublicKeyAlgorithm algo = sig.sig_type;
     assert(field_size_signature(algo) == sig.S.size());
     
     for (auto& byte : sig.S){
@@ -143,15 +148,17 @@ size_t deserialize(InputArchive& ar, EcdsaSignature& sig, const PublicKeyAlgorit
 
 size_t deserialize(InputArchive &ar, OqsSignature &sig, const PublicKeyAlgorithm &algo)
 {
+    sig.sig_type = algo;
+
     size_t size = field_size_signature(algo);
     uint8_t elem;
     for (size_t c = 0; c < size; c++)
     { 
         ar >> elem;
-        sig.S.push_back(elem);
+        sig.S[c] = elem;
     }
-
-    return sig.S.size();
+    
+    return get_size(sig);
 }
 
 size_t deserialize(InputArchive& ar, Signature& sig)
@@ -167,15 +174,15 @@ size_t deserialize(InputArchive& ar, Signature& sig)
             sig = signature;
             break;
         }
-        case PublicKeyAlgorithm::DILITHIUM2:
-        {
-            OqsSignature signature;
+        case PublicKeyAlgorithm::ECIES_NISTP256:
+        case PublicKeyAlgorithm::UNKNOWN:
+            assert(false && "Unknown PublicKeyAlgorithm");
+        default: {
+            OqsSignature signature(algo);
             size += deserialize(ar, signature, algo);
             sig = signature;
             break;
         }
-        default:
-            throw deserialization_error("Unknown PublicKeyAlgorithm");
     }
     return size;
 }

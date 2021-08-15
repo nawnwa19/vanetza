@@ -34,14 +34,12 @@ Signature signature_placeholder(const PublicKeyAlgorithm& pka = PublicKeyAlgorit
         result = ecdsa;
         break;
     }
-    case PublicKeyAlgorithm::DILITHIUM2:
-    {
-        const auto size = field_size_signature(pka);
-        OqsSignature oqs_sig(size);
-        result = oqs_sig;
-    }
+    case PublicKeyAlgorithm::ECIES_NISTP256:
+    case PublicKeyAlgorithm::UNKNOWN:
+        assert(false && "Unknown Signature algorithm");
     default:
-        break;
+        OqsSignature oqs_sig(pka);
+        result = oqs_sig;
     }
 
     return result;
@@ -69,7 +67,7 @@ SignService straight_sign_service(CertificateProvider& certificate_provider, Bac
 
             // For OQS
             [&](const generic_key::PrivateKeyOQS &key) {
-                placeholder = signature_placeholder(PublicKeyAlgorithm::DILITHIUM2);
+                placeholder = signature_placeholder(key.m_type);
             });
         boost::apply_visitor(visitor, private_key);
 
