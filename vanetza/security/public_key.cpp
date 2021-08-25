@@ -116,10 +116,10 @@ std::size_t field_size_signature(PublicKeyAlgorithm algo)
             size = 4595;
             break;
         case PublicKeyAlgorithm::FALCON_512:
-            size = 690;
+            size = 666;
             break;
         case PublicKeyAlgorithm::FALCON_1024:
-            size = 1330;
+            size = 1280;
             break;
         default:
             assert(false && "Unknown signature algorithm");
@@ -236,7 +236,7 @@ char const* enumStrings<PublicKeyAlgorithm>::data[] = {
 
 PublicKeyAlgorithm get_algo_from_string(const std::string &sig_key_type)
 {
-    PublicKeyAlgorithm pka = PublicKeyAlgorithm::UNKNOWN;
+    PublicKeyAlgorithm pka;
     std::stringstream ss(sig_key_type);
     ss >> enumFromString(pka);
     return pka;
