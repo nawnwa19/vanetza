@@ -55,6 +55,8 @@ std::istream& operator>>(std::istream& str, enumRefHolder<T> const& data) {
     if (find != end) {
         data.enumVal = static_cast<T>(std::distance(begin, find));
     }
+    else
+        data.enumVal = static_cast<T>(std::distance(begin, end) - 1);
     return str;
 }
 

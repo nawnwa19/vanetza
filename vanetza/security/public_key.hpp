@@ -29,7 +29,7 @@ enum class PublicKeyAlgorithm : uint8_t
     FALCON_512 = 5,
     FALCON_1024 = 6,
 
-    UNKNOWN = 239
+    UNKNOWN = 7
 };
 
 /// ecdsa_nistp256_with_sha256 specified in TS 103 097 v1.2.1, section 4.2.4

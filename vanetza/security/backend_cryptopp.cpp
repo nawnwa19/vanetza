@@ -28,9 +28,6 @@ Signature BackendCryptoPP::sign_data(const generic_key::PrivateKey& generic_key,
          [&](const ecdsa256::PrivateKey &key)
          {
              return Signature{sign_data(m_private_cache[key], data)};
-             auto diff = std::chrono::high_resolution_clock::now() - start; // get difference
-             auto msec = std::chrono::duration_cast<std::chrono::microseconds>(diff);
-             std::cout << "BackendCryptoppEcdsa::sign_data took: " << msec.count() << " microseconds" << std::endl;
          },
 
          // For OQS
@@ -199,7 +196,7 @@ generic_key::KeyPair BackendCryptoPP::generate_key_pair(const std::string& sig_k
     default:
     {
         generic_key::KeyPairOQS kp;
-        kp.private_key.m_type = get_algo_from_string(sig_key_type);
+        kp.private_key.m_type = type;
         kp.public_key.m_type = kp.private_key.m_type;
 
         oqs::Signature signer{sig_key_type};

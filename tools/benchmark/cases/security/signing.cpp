@@ -63,7 +63,7 @@ int SecuritySigningCase::execute()
         sign_header_policy.request_certificate_chain();
     }
 
-    std::cout << "Starting type: " << signature_key_type << " signing benchmark for " << messages << "messages ... ";
+    std::cout << "Starting type: " << signature_key_type << " signing benchmark for " << messages << " messages ... " << std::endl;
     {
         // Using std::chrono
         auto start = std::chrono::high_resolution_clock::now(); // start timer

@@ -74,7 +74,7 @@ Signature BackendOpenSsl::sign_data(const generic_key::PrivateKey& private_key, 
 
                 auto diff = std::chrono::high_resolution_clock::now() - start; // get difference
                 auto msec = std::chrono::duration_cast<std::chrono::microseconds>(diff);
-                std::cout << "BackendOpenSslEcdsa::sign_data took: " << msec.count() << " microseconds" << std::endl;
+                // std::cout << "BackendOpenSslEcdsa::sign_data took: " << msec.count() << " microseconds" << std::endl;
                 return Signature{ecdsa_signature};
             },
 
@@ -90,10 +90,10 @@ Signature BackendOpenSsl::sign_data(const generic_key::PrivateKey& private_key, 
                 // Sign the message
                 OqsSignature signature(key.m_type);
                 signature.S = signer.sign(data);
-                std::cout << "BackendOpenSslOQS::Sign size " << signature.S.size() << std::endl;
+                // std::cout << "BackendOpenSslOQS::Sign size " << signature.S.size() << std::endl;
                 auto diff = std::chrono::high_resolution_clock::now() - start; // get difference
                 auto msec = std::chrono::duration_cast<std::chrono::microseconds>(diff);
-                std::cout << "BackendOpenSslOQS::sign_data took: " << msec.count() << " microseconds" << std::endl;
+                // std::cout << "BackendOpenSslOQS::sign_data took: " << msec.count() << " microseconds" << std::endl;
                 return Signature{signature};
             });
 
