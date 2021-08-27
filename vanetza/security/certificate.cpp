@@ -169,12 +169,12 @@ boost::optional<generic_key::PublicKey> get_public_key(const Certificate& cert, 
 HashedId8 calculate_hash(const Certificate& cert)
 {
     boost::optional<Signature> sig_temp = extract_signature(cert.signature);
+    assert(sig_temp);
+    Certificate canonical_cert = cert;
     auto visitor = generic_key::compose(
         // For ECDSA
         [&](const EcdsaSignature &sig)
         {
-            Certificate canonical_cert = cert;
-
             // canonical encoding according to TS 103 097 V1.2.1, section 4.2.12
 
             struct canonical_visitor : public boost::static_visitor<EccPoint>
@@ -205,24 +205,20 @@ HashedId8 calculate_hash(const Certificate& cert)
             canonical_sig.R = boost::apply_visitor(canonical_visitor(), signature.R);
             assert(get_type(canonical_sig.R) == EccPointType::X_Coordinate_Only);
             canonical_cert.signature = canonical_sig;
-
-            ByteBuffer bytes;
-            serialize_into_buffer(canonical_cert, bytes);
-            return bytes;
         },
         // For ecdsa future
         [&](const EcdsaSignatureFuture &sig)
         {
-            return extract_signature_buffer(sig);
         },
         // For OQS
         [&](const OqsSignature &sig)
         {
-            return extract_signature_buffer(sig);
-        });
-    assert(sig_temp);
+        }); 
+    boost::apply_visitor(visitor, cert.signature);
 
-    ByteBuffer bytes = boost::apply_visitor(visitor, cert.signature);
+    ByteBuffer bytes;
+    serialize_into_buffer(canonical_cert, bytes);
+
     HashedId8 id;
     Sha256Digest digest = calculate_sha256_digest(bytes.data(), bytes.size());
     assert(digest.size() >= id.size());
