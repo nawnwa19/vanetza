@@ -39,7 +39,9 @@ private:
 struct OqsSignature
 {
     OqsSignature(PublicKeyAlgorithm type)
-        : sig_type{type}, S(field_size_signature(sig_type)){};
+        : sig_type{type}{};
+
+    OqsSignature(){};    
     PublicKeyAlgorithm sig_type;
     oqs::bytes S;
 };

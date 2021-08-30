@@ -22,6 +22,7 @@ int main(int argc, const char** argv)
     po::options_description options("Allowed options");
     options.add_options()
         ("help", "Print out available options.")
+        ("hybrid,h", po::value<std::string>()->default_value("no"), "Hybrid Certificates: yes or no")
         ("algorithm,g", po::value<std::string>()->default_value("ecdsa256"), "Signature Algorithm type")
         ("link-layer,l", po::value<std::string>()->default_value("ethernet"), "Link layer type")
         ("interface,i", po::value<std::string>()->default_value("lo"), "Network interface to use.")

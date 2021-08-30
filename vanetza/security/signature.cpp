@@ -149,13 +149,12 @@ size_t deserialize(InputArchive& ar, EcdsaSignature& sig, const PublicKeyAlgorit
 size_t deserialize(InputArchive &ar, OqsSignature &sig, const PublicKeyAlgorithm &algo)
 {
     sig.sig_type = algo;
-
     size_t size = field_size_signature(algo);
+
     uint8_t elem;
-    for (size_t c = 0; c < size; c++)
-    { 
+    for (size_t c = 0; c < size; c++) {
         ar >> elem;
-        sig.S[c] = elem;
+        sig.S.push_back(elem);
     }
     
     return get_size(sig);

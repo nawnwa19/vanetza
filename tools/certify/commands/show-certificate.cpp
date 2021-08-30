@@ -48,7 +48,7 @@ bool ShowCertificateCommand::parse(const std::vector<std::string>& opts)
 int ShowCertificateCommand::execute()
 {
     Certificate cert = load_certificate_from_file(certificate_path);
-
+    std::cout << "Version: " << cert.version;
     // subject info
 
     std::cout << "Subject: ";

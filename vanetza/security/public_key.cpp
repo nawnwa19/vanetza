@@ -101,7 +101,7 @@ std::size_t field_size_signature(PublicKeyAlgorithm algo)
     size_t size = 0;
     switch (algo) {
         case PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256:
-            size = 32;
+            size = 64;
             break;
         case PublicKeyAlgorithm::ECIES_NISTP256:
             size = 32;

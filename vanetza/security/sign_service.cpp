@@ -6,6 +6,7 @@
 #include <vanetza/security/sign_service.hpp>
 #include <cassert>
 #include <future>
+#include <vanetza/security/variant_lambda_helper.hpp>
 
 namespace vanetza
 {
@@ -39,6 +40,7 @@ Signature signature_placeholder(const PublicKeyAlgorithm& pka = PublicKeyAlgorit
         assert(false && "Unknown Signature algorithm");
     default:
         OqsSignature oqs_sig(pka);
+        oqs_sig.S.resize(field_size_signature(pka));
         result = oqs_sig;
     }
 
@@ -59,7 +61,7 @@ SignService straight_sign_service(CertificateProvider& certificate_provider, Bac
         const auto& private_key = certificate_provider.own_private_key();
         static Signature placeholder;
 
-        auto visitor = generic_key::compose(
+        auto visitor = compose_security(
             // For ECDSA
             [&](const ecdsa256::PrivateKey &key) {
                 placeholder = signature_placeholder(PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256);

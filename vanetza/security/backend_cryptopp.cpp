@@ -7,6 +7,7 @@
 #include <functional>
 #include <iostream>
 #include <boost/variant.hpp>
+#include <vanetza/security/variant_lambda_helper.hpp>
 namespace vanetza
 {
 namespace security
@@ -22,12 +23,20 @@ BackendCryptoPP::BackendCryptoPP() :
 
 Signature BackendCryptoPP::sign_data(const generic_key::PrivateKey& generic_key, const ByteBuffer& data)
 {
-     auto start = std::chrono::high_resolution_clock::now(); // start timer
-     auto visitor = generic_key::compose(
+     
+     auto visitor = compose_security(
          // For ECDSA
          [&](const ecdsa256::PrivateKey &key)
          {
-             return Signature{sign_data(m_private_cache[key], data)};
+             //std::cout << "BackendCryptoppOQS::Data size " << data.size() << std::endl;
+             //std::cout << "BackendCryptoppEcdsa::Sign size " << field_size(PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256) << std::endl;
+             auto start = std::chrono::high_resolution_clock::now(); // start timer
+             Signature result = std::move(sign_data(m_private_cache[key], data));
+             auto diff = std::chrono::high_resolution_clock::now() - start; // get difference
+             auto msec = std::chrono::duration_cast<std::chrono::microseconds>(diff);
+             //std::cout << "BackendCryptoppEcdsa::sign_data took: " << msec.count() << " microseconds" << std::endl;
+             return result;
+        
          },
 
          // For OQS
@@ -41,11 +50,13 @@ Signature BackendCryptoPP::sign_data(const generic_key::PrivateKey& generic_key,
              
              // Sign the message
              OqsSignature signature(key.m_type);
+             auto start = std::chrono::high_resolution_clock::now(); // start timer
+             //std::cout << "BackendCryptoppOQS::Data size " << data.size() << std::endl;
              signature.S = signer.sign(data);
-             std::cout << "Sign size " << signature.S.size() << std::endl;
+             //std::cout << "BackendCryptoppOQS::Sign size " << signature.S.size() << std::endl;
              auto diff = std::chrono::high_resolution_clock::now() - start; // get difference
              auto msec = std::chrono::duration_cast<std::chrono::microseconds>(diff);
-             std::cout << "BackendCryptoppOQS::sign_data took: " << msec.count() << " microseconds" << std::endl;
+             //std::cout << "BackendCryptoppOQS::sign_data took: " << msec.count() << " microseconds" << std::endl;
              return Signature{signature};
          });
      return boost::apply_visitor(visitor, generic_key);
@@ -78,7 +89,7 @@ bool BackendCryptoPP::verify_data(const generic_key::PublicKey& generic_key, con
 {
     const ByteBuffer sigbuf = extract_signature_buffer(sig);
 
-    auto visitor = generic_key::compose(
+    auto visitor = compose_security(
         // For ECDSA
         [&](const EcdsaSignature &sig)
         {

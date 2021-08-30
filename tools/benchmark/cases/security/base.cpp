@@ -5,12 +5,13 @@
 using namespace vanetza; 
 using namespace vanetza::security;
 
-SecurityBaseCase::SecurityBaseCase(const std::string& sig_key_type) :
+SecurityBaseCase::SecurityBaseCase(const std::string& sig_key_type, bool hybrid) :
     runtime(Clock::at(boost::posix_time::microsec_clock::universal_time())),
     signature_key_type(sig_key_type),
+    m_hybrid(hybrid),
     crypto_backend(create_backend("default")),
     certificate_cache(runtime),
-    certificate_provider(runtime,signature_key_type),
+    certificate_provider(runtime,signature_key_type, hybrid),
     certificate_validator(*crypto_backend, certificate_cache, trust_store),
     sign_header_policy(runtime, positioning),
     sign_service(straight_sign_service(certificate_provider, *crypto_backend, sign_header_policy)),

@@ -200,7 +200,7 @@ CertificateValidity DefaultCertificateValidator::check_certificate(const Certifi
     if (!sig) {
         return CertificateInvalidReason::Missing_Signature;
     }
-
+    
     // create buffer of certificate
     ByteBuffer binary_cert = convert_for_signing(certificate);
 
@@ -212,11 +212,39 @@ CertificateValidity DefaultCertificateValidator::check_certificate(const Certifi
                 continue;
             }
 
-            if (m_crypto_backend.verify_data(verification_key.get(), binary_cert, sig.get())) {
+            if (m_crypto_backend.verify_data(verification_key.get(),
+                                             binary_cert, sig.get())) {
+                if (certificate.version == 3) {
+                    Certificate inner_cert = certificate;
+                    generic_key::PublicKeyOQS hybrid_pub_key;
+                    hybrid_pub_key.m_type =
+                        certificate.hybrid_signature_extension.hybrid_sig
+                            .sig_type;
+                    hybrid_pub_key.pub_K =
+                        certificate.hybrid_signature_extension.hybrid_key.K;
+
+                    size_t sig_size =
+                        field_size_signature(hybrid_pub_key.m_type);
+                    memset(inner_cert.hybrid_signature_extension.hybrid_sig.S
+                               .data(),
+                           0, sig_size);
+
+                    ByteBuffer inner_binary_cert =
+                        convert_for_signing(inner_cert);
+
+                    if (!m_crypto_backend.verify_data(
+                            hybrid_pub_key, inner_binary_cert,
+                            certificate.hybrid_signature_extension
+                                .hybrid_sig)) {
+                        // later, add new invalid reason
+                        return CertificateInvalidReason::Missing_Signature;
+                    }
+                }
+
                 if (!check_consistency(certificate, possible_signer)) {
                     return CertificateInvalidReason::Inconsistent_With_Signer;
                 }
-                
+
                 return CertificateValidity::valid();
             }
         }
@@ -231,7 +259,23 @@ CertificateValidity DefaultCertificateValidator::check_certificate(const Certifi
                 continue;
             }
 
-            if (m_crypto_backend.verify_data(verification_key.get(), binary_cert, sig.get())) {
+            if (m_crypto_backend.verify_data(verification_key.get(),
+                                             binary_cert, sig.get())) {
+                if (certificate.version == 3) {
+                    generic_key::PublicKeyOQS hybrid_pub_key;
+                    hybrid_pub_key.m_type =
+                        certificate.hybrid_signature_extension.hybrid_sig
+                            .sig_type;
+                    hybrid_pub_key.pub_K =
+                        certificate.hybrid_signature_extension.hybrid_key.K;
+                    if (!m_crypto_backend.verify_data(
+                            hybrid_pub_key, binary_cert,
+                            certificate.hybrid_signature_extension
+                                .hybrid_sig)) {
+                        // later, add new invalid reason
+                        return CertificateInvalidReason::Missing_Signature;
+                    }
+                }
                 if (!check_consistency(certificate, possible_signer)) {
                     return CertificateInvalidReason::Inconsistent_With_Signer;
                 }

@@ -261,15 +261,18 @@ VerifyService straight_verify_service(const Runtime& rt, CertificateProvider& ce
             return confirm;
         }
 
-        // if (PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256 != get_type(*signature)) {
-        //     confirm.report = VerificationReport::False_Signature;
-        //     return confirm;
-        // }
+        PublicKeyAlgorithm type = get_type(*signature);
+        if (PublicKeyAlgorithm::UNKNOWN == type) {
+            confirm.report = VerificationReport::False_Signature;
+            return confirm;
+        }
 
-        // check the size of signature.R and siganture.s
-        auto ecdsa = extract_signature(*signature);
-        // const auto field_len = field_size(PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256);
-        // if (!ecdsa || ecdsa->s.size() != field_len) {
+        // check the size of signature.R and siganture.s for ecdsa only
+        // Later if message has hybrid signature, this would not work
+        auto sig = extract_signature(*signature);
+        // const auto sig_size = field_size_signature(type) +
+        //                       sizeof(PublicKeyAlgorithm) + sizeof(EccPointType);
+        // if (!sig || get_size(*sig) != sig_size) {
         //     confirm.report = VerificationReport::False_Signature;
         //     return confirm;
         // }
@@ -295,7 +298,7 @@ VerifyService straight_verify_service(const Runtime& rt, CertificateProvider& ce
                 return confirm;
             }
 
-            if (backend.verify_data(public_key.get(), payload, *ecdsa)) {
+            if (backend.verify_data(public_key.get(), payload, *sig)) {
                 signer = cert;
                 break;
             }

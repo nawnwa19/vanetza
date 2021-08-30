@@ -15,9 +15,8 @@
 
 namespace po = boost::program_options;
 using namespace CryptoPP;
-GenerateKeyCommand::GenerateKeyCommand(const std::string& sig_key_type):m_signature_key_type(sig_key_type){
-
-}
+GenerateKeyCommand::GenerateKeyCommand(const std::string& sig_key_type)
+    : m_signature_key_type(sig_key_type) {}
 
 bool GenerateKeyCommand::parse(const std::vector<std::string>& opts)
 {

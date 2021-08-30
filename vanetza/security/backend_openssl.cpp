@@ -12,6 +12,7 @@
 #include <iostream>
 #include <boost/variant.hpp>
 #include <liboqs-cpp/include/oqs_cpp.h>
+#include <vanetza/security/variant_lambda_helper.hpp>
 
 namespace vanetza
 {
@@ -29,13 +30,13 @@ BackendOpenSsl::BackendOpenSsl()
 
 Signature BackendOpenSsl::sign_data(const generic_key::PrivateKey& private_key, const ByteBuffer& data)
 {
-    auto start = std::chrono::high_resolution_clock::now(); // start timer
+    
     auto visitor =
-        generic_key::compose(
+        compose_security(
             // For ECDSA
             [&](const ecdsa256::PrivateKey &key)
             {
-                
+                auto start = std::chrono::high_resolution_clock::now(); // start timer
                 auto priv_key = internal_private_key(key);
                 auto digest = calculate_digest(data);
                          
@@ -69,12 +70,12 @@ Signature BackendOpenSsl::sign_data(const generic_key::PrivateKey& private_key, 
                 } else {
                     throw openssl::Exception();
                 }
-                // std::cout << "BackendOpenSslEcdsa::Sign size " << field_size(PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256) << std::endl;
+                std::cout << "BackendOpenSslEcdsa::Sign size " << field_size(PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256) << std::endl;
                 ecdsa_signature.R = std::move(coordinate);
 
                 auto diff = std::chrono::high_resolution_clock::now() - start; // get difference
                 auto msec = std::chrono::duration_cast<std::chrono::microseconds>(diff);
-                // std::cout << "BackendOpenSslEcdsa::sign_data took: " << msec.count() << " microseconds" << std::endl;
+                //std::cout << "BackendOpenSslEcdsa::sign_data took: " << msec.count() << " microseconds" << std::endl;
                 return Signature{ecdsa_signature};
             },
 
@@ -89,11 +90,13 @@ Signature BackendOpenSsl::sign_data(const generic_key::PrivateKey& private_key, 
 
                 // Sign the message
                 OqsSignature signature(key.m_type);
+                //std::cout << "BackendOpenSslOQS::Data size " << data.size() << std::endl;
+                auto start = std::chrono::high_resolution_clock::now(); // start timer
                 signature.S = signer.sign(data);
-                // std::cout << "BackendOpenSslOQS::Sign size " << signature.S.size() << std::endl;
+                std::cout << "BackendOpenSsl" << sig_name << "::Sign size " << signature.S.size() << std::endl;
                 auto diff = std::chrono::high_resolution_clock::now() - start; // get difference
                 auto msec = std::chrono::duration_cast<std::chrono::microseconds>(diff);
-                // std::cout << "BackendOpenSslOQS::sign_data took: " << msec.count() << " microseconds" << std::endl;
+                //std::cout << "BackendOpenSsl" << sig_name << "::sign_data took: " << msec.count() << " microseconds" << std::endl;
                 return Signature{signature};
             });
 
@@ -103,14 +106,14 @@ Signature BackendOpenSsl::sign_data(const generic_key::PrivateKey& private_key, 
 bool BackendOpenSsl::verify_data(const generic_key::PublicKey& key, const ByteBuffer& data, const Signature& sig)
 {
     auto digest = calculate_digest(data);
-    auto visitor = generic_key::compose(
+    auto visitor = compose_security(
         // For ECDSA
         [&](const EcdsaSignature &sig)
         {
             auto ecdsa_key = boost::get<ecdsa256::PublicKey>(key);
             auto pub = internal_public_key(ecdsa_key);
             openssl::Signature signature(sig);
-
+             std::cout << "BackendOpenSslEcdsa::Verify size " << field_size(PublicKeyAlgorithm::ECDSA_NISTP256_With_SHA256) << std::endl;
             bool v_result = (ECDSA_do_verify(digest.data(), digest.size(), signature, pub) == 1);
             return v_result;
         },
@@ -125,7 +128,7 @@ bool BackendOpenSsl::verify_data(const generic_key::PublicKey& key, const ByteBu
             auto oqs_key = boost::get<generic_key::PublicKeyOQS>(key);
             std::string sig_name = get_string_from_algo(oqs_key.m_type);
             oqs::Signature verifier{sig_name};
-
+            std::cout << "BackendOpenSsl" << sig_name << "::Verify size " << sig.S.size() << std::endl;
             bool v_result = verifier.verify(data, sig.S, oqs_key.pub_K);
             return v_result;
         });

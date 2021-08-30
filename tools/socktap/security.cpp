@@ -9,6 +9,7 @@
 #include <vanetza/security/static_certificate_provider.hpp>
 #include <vanetza/security/trust_store.hpp>
 #include <stdexcept>
+#include <vanetza/security/variant_lambda_helper.hpp>
 
 using namespace vanetza;
 namespace po = boost::program_options;
@@ -69,6 +70,13 @@ create_security_entity(const po::variables_map& vm, const Runtime& runtime, Posi
 {
     std::unique_ptr<security::SecurityEntity> security;
     const std::string sig_algo_type = vm["algorithm"].as<std::string>();
+    const std::string hybrid_string = vm["hybrid"].as<std::string>();
+    // Hybrid or normal certificates
+    bool hybrid = (hybrid_string == "yes" ? true : false);
+    if (hybrid) {
+        if (sig_algo_type == "ecdsa256")
+            throw std::runtime_error("Must specify PQ algorithm with hybrid");
+    }
 
     const std::string name = vm["security"].as<std::string>();
 
@@ -93,40 +101,67 @@ create_security_entity(const po::variables_map& vm, const Runtime& runtime, Posi
             auto authorization_ticket = security::load_certificate_from_file(certificate_path);
             auto authorization_ticket_key = security::load_private_key_from_file(certificate_key_path,sig_algo_type);
 
-            auto visitor = security::generic_key::compose
-            (
-                [&](const security::ecdsa256::KeyPair &key_pair) 
-                {
+            auto visitor = security::compose_security(
+                [&](const security::ecdsa256::KeyPair& key_pair) {
                     return security::generic_key::PrivateKey {key_pair.private_key};
                 },
 
-                // For OQS later
-                [&](const security::generic_key::KeyPairOQS &key_pair) 
-                {
-                    return security::generic_key::PrivateKey {key_pair.private_key};
-                }
-            );
+                // For OQS
+                [&](const security::generic_key::KeyPairOQS& key_pair) {
+                    return security::generic_key::PrivateKey{
+                        key_pair.private_key};
+                });
 
-            auto at_key = boost::apply_visitor(visitor,authorization_ticket_key);
+            security::generic_key::PrivateKey at_key;
+            security::generic_key::PrivateKey at_outer_key;
+
+            if (hybrid) {
+                if (!vm.count("certificate-outer-key")) {
+                    throw std::runtime_error(
+                        "Hybrid requires --certificate-outer-key.");
+                }
+                const std::string& certificate_outer_key_path =
+                    vm["certificate-outer-key"].as<std::string>();
+                auto at_outer_key_pair = security::load_private_key_from_file(
+                    certificate_outer_key_path, "ecdsa256");
+                at_outer_key = boost::apply_visitor(visitor, at_outer_key_pair);
+                at_key = boost::apply_visitor(visitor, authorization_ticket_key);
+            } else {
+                at_key =
+                    boost::apply_visitor(visitor, authorization_ticket_key);
+            }
 
             std::list<security::Certificate> chain;
 
             if (vm.count("certificate-chain")) {
-                for (auto& chain_path : vm["certificate-chain"].as<std::vector<std::string> >()) {
-                    auto chain_certificate = security::load_certificate_from_file(chain_path);
+                for (auto& chain_path :
+                     vm["certificate-chain"].as<std::vector<std::string> >()) {
+                    auto chain_certificate =
+                        security::load_certificate_from_file(chain_path);
                     chain.push_back(chain_certificate);
                     context->cert_cache.insert(chain_certificate);
 
-                    // Only add root certificates to trust store, so certificate requests are visible for demo purposes.
-                    if (chain_certificate.subject_info.subject_type == security::SubjectType::Root_CA) {
+                    // Only add root certificates to trust store, so
+                    // certificate requests are visible for demo purposes.
+                    if (chain_certificate.subject_info.subject_type ==
+                        security::SubjectType::Root_CA) {
                         context->trust_store.insert(chain_certificate);
                     }
                 }
             }
 
-            context->cert_provider.reset(new security::StaticCertificateProvider(authorization_ticket, at_key, chain));
+            if (hybrid) {
+                context->cert_provider.reset(
+                    new security::StaticCertificateProvider(
+                        authorization_ticket, at_key, at_outer_key, chain, hybrid));
+            } else {
+                context->cert_provider.reset(
+                    new security::StaticCertificateProvider(
+                        authorization_ticket, at_key, chain));
+            }
+
         } else {
-            context->cert_provider.reset(new security::NaiveCertificateProvider(runtime,sig_algo_type));
+            context->cert_provider.reset(new security::NaiveCertificateProvider(runtime,sig_algo_type, hybrid));
         }
 
         if (vm.count("trusted-certificate")) {
@@ -151,6 +186,7 @@ void add_security_options(po::options_description& options)
         ("security", po::value<std::string>()->default_value("dummy"), "Security entity [none,dummy,certs]")
         ("certificate", po::value<std::string>(), "Certificate to use for secured messages.")
         ("certificate-key", po::value<std::string>(), "Certificate key to use for secured messages.")
+        ("certificate-outer-key", po::value<std::string>(), "Certificate outer key to use for hybrid certificates.")
         ("certificate-chain", po::value<std::vector<std::string> >()->multitoken(), "Certificate chain to use, use as often as needed.")
         ("trusted-certificate", po::value<std::vector<std::string> >()->multitoken(), "Trusted certificate, use as often as needed. Root certificates in the chain are automatically trusted.")
     ;

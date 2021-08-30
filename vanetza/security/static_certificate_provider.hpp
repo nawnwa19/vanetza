@@ -31,6 +31,11 @@ public:
      */
     StaticCertificateProvider(const Certificate& authorization_ticket, const generic_key::PrivateKey& ticket_key,
             const std::list<Certificate>& chain);
+    StaticCertificateProvider(const Certificate& authorization_ticket,
+                              const generic_key::PrivateKey& ticket_key,
+                              const generic_key::PrivateKey& ticket_outer_key,
+                              const std::list<Certificate>& chain,
+                              bool hybrid);
 
     /**
      * Get own certificate to use for signing
@@ -51,9 +56,12 @@ public:
     virtual const generic_key::PrivateKey& own_private_key() override;
 
 private:
+    const generic_key::PrivateKey& own_private_outer_key();
     Certificate authorization_ticket;
     generic_key::PrivateKey authorization_ticket_key;
+    generic_key::PrivateKey authorization_ticket_outer_key;
     std::list<Certificate> chain;
+    bool m_hybrid;
 };
 
 } // namespace security

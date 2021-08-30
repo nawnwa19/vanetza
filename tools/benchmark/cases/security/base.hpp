@@ -17,13 +17,14 @@
 class SecurityBaseCase : public Case
 {
 public:
-    SecurityBaseCase(const std::string& sig_key_type);
+    SecurityBaseCase(const std::string& sig_key_type, bool);
 
     void prepare() override;
  
 protected:
     vanetza::ManualRuntime runtime;
     std::string signature_key_type;
+    bool m_hybrid;
     vanetza::StoredPositionProvider positioning;
     std::unique_ptr<vanetza::security::Backend> crypto_backend;
     vanetza::security::TrustStore trust_store;

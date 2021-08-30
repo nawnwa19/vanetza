@@ -2,6 +2,7 @@
 #include <vanetza/security/public_key.hpp>
 #include <boost/variant.hpp>
 #include <cassert>
+#include <vanetza/security/variant_lambda_helper.hpp>
 namespace vanetza
 {
 namespace security
@@ -69,7 +70,7 @@ void deserialize(InputArchive& ar, KeyPairOQS& key_pair,
 generic_key::PublicKeyOQS get_genericPublicKey_from_PublicKey(
     const PublicKey& pub_key) {
     generic_key::PublicKeyOQS oqs_key;
-    auto visitor = generic_key::compose(
+    auto visitor = compose_security(
         // For ECDSA256
         [&](const ecdsa_nistp256_with_sha256& pub_key) { return oqs_key; },
         // For ECIES future

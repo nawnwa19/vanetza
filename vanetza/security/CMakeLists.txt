@@ -21,6 +21,7 @@ add_vanetza_component(security
     generic_key.cpp
     public_key.cpp
     public_key_commons.cpp
+    extension.cpp
     recipient_info.cpp
     region.cpp
     secured_message.cpp

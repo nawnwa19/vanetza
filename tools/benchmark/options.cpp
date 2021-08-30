@@ -11,10 +11,12 @@ std::unique_ptr<Case> parse_options(int argc, const char *argv[])
 {
     po::options_description global("Global options");
     std::string signature_key_type;
+    std::string hybrid_string;
     global.add_options()
         ("case", po::value<std::string>(), "Case to execute.")
         ("subargs", po::value<std::vector<std::string>>(), "Arguments for case.")
-        ("algorithm", po::value<std::string>(&signature_key_type)->default_value("ecdsa256"), "ECDSA,Dilithium2/3/5,Falcon-512,Falcon-1024");
+        ("algorithm", po::value<std::string>(&signature_key_type)->default_value("ecdsa256"), "ecdsa256,Dilithium3/5,Falcon-512,Falcon-1024")
+        ("hybrid", po::value<std::string>(&hybrid_string)->default_value("no"), "Hybrid Certificates: yes or no");
     
     po::positional_options_description pos;
     pos.add("case", 1);
@@ -40,6 +42,13 @@ std::unique_ptr<Case> parse_options(int argc, const char *argv[])
         return nullptr;
     }
 
+    // Hybrid or normal certificates
+    bool hybrid = (hybrid_string == "yes"? true : false);
+    if (hybrid) {
+        if (signature_key_type == "ecdsa256")
+            throw std::runtime_error("Must specify PQ algorithm with hybrid");
+    }
+
     std::string name = vm["case"].as<std::string>();
     std::unique_ptr<Case> instance;
 
@@ -47,9 +56,9 @@ std::unique_ptr<Case> parse_options(int argc, const char *argv[])
         std::cerr << global << std::endl;
         std::cerr << available_commands << std::endl;
     } else if (name == "security-signing") {
-        instance.reset(new SecuritySigningCase(signature_key_type));
+        instance.reset(new SecuritySigningCase(signature_key_type,hybrid));
     } else if (name == "security-validation") {
-        instance.reset(new SecurityValidationCase(signature_key_type));
+        instance.reset(new SecurityValidationCase(signature_key_type,hybrid));
     } else {
         throw std::runtime_error("Unknown benchmark case.");
     }

@@ -15,6 +15,7 @@
 #include <vanetza/security/validity_restriction.hpp>
 #include <boost/optional/optional.hpp>
 #include <boost/variant/get.hpp>
+#include <vanetza/security/extension.hpp>
 
 namespace vanetza
 {
@@ -28,10 +29,10 @@ struct Certificate
     SubjectInfo subject_info;
     std::list<SubjectAttribute> subject_attributes;
     std::list<ValidityRestriction> validity_restriction;
+    Extension hybrid_signature_extension;
     Signature signature;
     // certificate version is two, for conformance with the present standard
-    uint8_t version() const { return 2; }
-
+    uint8_t version = 2;
     /**
      * Get subject attribute of a certain type (if present)
      * \param type of subject attribute

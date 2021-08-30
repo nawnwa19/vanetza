@@ -22,13 +22,16 @@ namespace security
 
 size_t get_size(const Certificate& cert)
 {
-    size_t size = sizeof(cert.version());
+    size_t size = sizeof(cert.version);
     size += get_size(cert.signer_info);
     size += get_size(cert.subject_info);
     size += get_size(cert.subject_attributes);
     size += length_coding_size(get_size(cert.subject_attributes));
     size += get_size(cert.validity_restriction);
     size += length_coding_size(get_size(cert.validity_restriction));
+    if (cert.version == 3) {
+        size += get_size(cert.hybrid_signature_extension);
+    }
     size += get_size(cert.signature);
     return size;
 }
@@ -36,11 +39,14 @@ size_t get_size(const Certificate& cert)
 
 void serialize(OutputArchive& ar, const Certificate& cert)
 {
-    serialize(ar, host_cast(cert.version()));
+    serialize(ar, host_cast(cert.version));
     serialize(ar, cert.signer_info);
     serialize(ar, cert.subject_info);
     serialize(ar, cert.subject_attributes);
     serialize(ar, cert.validity_restriction);
+    if (cert.version == 3) {
+        serialize(ar, cert.hybrid_signature_extension);
+    }
     serialize(ar, cert.signature);
 }
 
@@ -48,14 +54,20 @@ size_t deserialize(InputArchive& ar, Certificate& cert)
 {
     uint8_t version = 0;
     deserialize(ar, version);
-    size_t size = sizeof(cert.version());
-    if (2 == version) {
+    std::cout << "Version: " << (int)version << std::endl;
+    cert.version = version;
+    size_t size = sizeof(cert.version);
+    if (2 == version || 3 == version) {
         size += deserialize(ar, cert.signer_info);
         size += deserialize(ar, cert.subject_info);
         size += deserialize(ar, cert.subject_attributes);
         size += length_coding_size(get_size(cert.subject_attributes));
         size += deserialize(ar, cert.validity_restriction);
         size += length_coding_size(get_size(cert.validity_restriction));
+
+        if (3 == version)
+            size += deserialize(ar, cert.hybrid_signature_extension);
+
         size += deserialize(ar, cert.signature);
     } else {
         throw deserialization_error("Unsupported Certificate version");
@@ -72,7 +84,7 @@ ByteBuffer convert_for_signing(const Certificate& cert)
     boost::iostreams::stream_buffer<byte_buffer_sink> stream(sink);
     OutputArchive ar(stream);
     
-    const uint8_t version = cert.version();
+    const uint8_t version = cert.version;
     
     ar << version;
     
@@ -80,6 +92,10 @@ ByteBuffer convert_for_signing(const Certificate& cert)
     serialize(ar, cert.subject_info);
     serialize(ar, cert.subject_attributes);
     serialize(ar, cert.validity_restriction);
+
+    if (version == 3) {
+        serialize(ar, cert.hybrid_signature_extension);
+    }
 
     stream.close();
     return buf;
@@ -171,7 +187,7 @@ HashedId8 calculate_hash(const Certificate& cert)
     boost::optional<Signature> sig_temp = extract_signature(cert.signature);
     assert(sig_temp);
     Certificate canonical_cert = cert;
-    auto visitor = generic_key::compose(
+    auto visitor = compose_security(
         // For ECDSA
         [&](const EcdsaSignature &sig)
         {

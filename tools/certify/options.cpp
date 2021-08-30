@@ -15,10 +15,12 @@ std::unique_ptr<Command> parse_options(int argc, const char *argv[])
 {
     po::options_description global("Global options");
     std::string signature_key_type;
+    std::string hybrid_string;
     global.add_options()
         ("command", po::value<std::string>(), "Command to execute.")
         ("subargs", po::value<std::vector<std::string>>(), "Arguments for command.")
-        ("algorithm", po::value<std::string>(&signature_key_type)->default_value("ecdsa256"), "ECDSA,Dilithium2/3/5,Falcon-512,Falcon-1024")
+        ("algorithm", po::value<std::string>(&signature_key_type)->default_value("ecdsa256"), "ecdsa256,Dilithium3/5,Falcon-512,Falcon-1024")
+        ("hybrid", po::value<std::string>(&hybrid_string)->default_value("no"), "Hybrid Certificates: yes or no")
     ;
 
     po::positional_options_description pos;
@@ -45,6 +47,13 @@ std::unique_ptr<Command> parse_options(int argc, const char *argv[])
         return nullptr;
     }
 
+    // Hybrid or normal certificates
+    bool hybrid = (hybrid_string == "yes"? true : false);
+    if (hybrid) {
+        if (signature_key_type == "ecdsa256")
+            throw std::runtime_error("Must specify PQ algorithm with hybrid");
+    }
+
     std::string cmd = vm["command"].as<std::string>();
     std::unique_ptr<Command> command;
 
@@ -52,15 +61,15 @@ std::unique_ptr<Command> parse_options(int argc, const char *argv[])
         std::cerr << global << std::endl;
         std::cerr << available_commands << std::endl;
     } else if (cmd == "extract-public-key") {
-        command.reset(new ExtractPublicKeyCommand(signature_key_type));
+        command.reset(new ExtractPublicKeyCommand(signature_key_type,hybrid));
     } else if (cmd == "generate-aa") {
-        command.reset(new GenerateAaCommand(signature_key_type));
+        command.reset(new GenerateAaCommand(signature_key_type,hybrid));
     } else if (cmd == "generate-key") {
         command.reset(new GenerateKeyCommand(signature_key_type));
     } else if (cmd == "generate-root") {
-        command.reset(new GenerateRootCommand(signature_key_type));
+        command.reset(new GenerateRootCommand(signature_key_type,hybrid));
     } else if (cmd == "generate-ticket") {
-        command.reset(new GenerateTicketCommand(signature_key_type));
+        command.reset(new GenerateTicketCommand(signature_key_type,hybrid));
     } else if (cmd == "show-certificate") {
         command.reset(new ShowCertificateCommand());
     } else {

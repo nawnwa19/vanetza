@@ -8,9 +8,9 @@ using namespace vanetza;
 using namespace vanetza::security;
 namespace po = boost::program_options;
 
-SecurityValidationCase::SecurityValidationCase(std::string& sig_key_type) : SecurityBaseCase(sig_key_type)
-{
-}
+SecurityValidationCase::SecurityValidationCase(std::string& sig_key_type,
+                                               bool hybrid)
+    : SecurityBaseCase(sig_key_type, hybrid) {}
 
 bool SecurityValidationCase::parse(const std::vector<std::string>& opts)
 {
@@ -61,7 +61,7 @@ int SecurityValidationCase::execute()
     std::vector<SecuredMessageV2> secured_messages(identities);
 
     for (unsigned i = 0; i < identities; i++) {
-        providers[i] = new NaiveCertificateProvider(runtime,signature_key_type);
+        providers[i] = new NaiveCertificateProvider(runtime,signature_key_type,m_hybrid);
         signers[i] = straight_sign_service(*providers[i], *crypto_backend, sign_header_policy);
         entities[i] = new DelegatingSecurityEntity(signers[i], verify_service);
         certificate_cache.insert(providers[i]->own_certificate());
@@ -102,8 +102,11 @@ int SecurityValidationCase::execute()
     std::mt19937 gen(0);
     std::uniform_int_distribution<> dis(0, identities - 1);
 
-    std::cout << "Starting type: " << signature_key_type << " validation benchmark for " << messages << " messages ... " << std::endl;
-
+    std::cout << "Starting type: " << signature_key_type
+              << " validation benchmark for " << messages << " messages"
+              << std::endl
+              << "---- Hybrid -----: " << std::boolalpha << m_hybrid
+              << std::endl;
 
     // Using std::chrono
     auto start = std::chrono::high_resolution_clock::now(); // start timer
